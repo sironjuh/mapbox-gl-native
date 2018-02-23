@@ -59,10 +59,11 @@ public final class Mapbox {
       try {
         MapboxTelemetry.getInstance().initialize(
           appContext, accessToken, BuildConfig.MAPBOX_EVENTS_USER_AGENT, locationEngine);
+        MapboxTelemetry.getInstance().setTelemetryEnabled(false);
       } catch (Exception exception) {
         Timber.e(exception, "Unable to instantiate Mapbox telemetry");
       }
-
+      Timber.i("NOTE! THIS IS MODIFIED VERSION OF MAPBOX THAT HAS TELEMETRY DISABLED!");
       ConnectivityReceiver.instance(appContext);
     }
     return INSTANCE;
