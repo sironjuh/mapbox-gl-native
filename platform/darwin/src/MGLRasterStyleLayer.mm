@@ -2,7 +2,7 @@
 // Edit platform/darwin/scripts/generate-style-code.js, then run `make darwin-style-code`.
 
 #import "MGLSource.h"
-#import "NSPredicate+MGLAdditions.h"
+#import "NSPredicate+MGLPrivateAdditions.h"
 #import "NSDate+MGLAdditions.h"
 #import "MGLStyleLayer_Private.h"
 #import "MGLStyleValue_Private.h"
@@ -10,6 +10,15 @@
 
 #include <mbgl/style/transition_options.hpp>
 #include <mbgl/style/layers/raster_layer.hpp>
+
+namespace mbgl {
+
+    MBGL_DEFINE_ENUM(MGLRasterResamplingMode, {
+        { MGLRasterResamplingModeLinear, "linear" },
+        { MGLRasterResamplingModeNearest, "nearest" },
+    });
+
+}
 
 @interface MGLRasterStyleLayer ()
 
@@ -42,7 +51,7 @@
 - (void)setMaximumRasterBrightness:(NSExpression *)maximumRasterBrightness {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(maximumRasterBrightness);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(maximumRasterBrightness, false);
     self.rawLayer->setRasterBrightnessMax(mbglValue);
 }
 
@@ -84,7 +93,7 @@
 - (void)setMinimumRasterBrightness:(NSExpression *)minimumRasterBrightness {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(minimumRasterBrightness);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(minimumRasterBrightness, false);
     self.rawLayer->setRasterBrightnessMin(mbglValue);
 }
 
@@ -126,7 +135,7 @@
 - (void)setRasterContrast:(NSExpression *)rasterContrast {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterContrast);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterContrast, false);
     self.rawLayer->setRasterContrast(mbglValue);
 }
 
@@ -161,7 +170,7 @@
 - (void)setRasterFadeDuration:(NSExpression *)rasterFadeDuration {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterFadeDuration);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterFadeDuration, false);
     self.rawLayer->setRasterFadeDuration(mbglValue);
 }
 
@@ -178,7 +187,7 @@
 - (void)setRasterHueRotation:(NSExpression *)rasterHueRotation {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterHueRotation);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterHueRotation, false);
     self.rawLayer->setRasterHueRotate(mbglValue);
 }
 
@@ -220,7 +229,7 @@
 - (void)setRasterOpacity:(NSExpression *)rasterOpacity {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterOpacity);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterOpacity, false);
     self.rawLayer->setRasterOpacity(mbglValue);
 }
 
@@ -252,10 +261,34 @@
     return transition;
 }
 
+- (void)setRasterResamplingMode:(NSExpression *)rasterResamplingMode {
+    MGLAssertStyleLayerIsValid();
+
+    auto mbglValue = MGLStyleValueTransformer<mbgl::style::RasterResamplingType, NSValue *, mbgl::style::RasterResamplingType, MGLRasterResamplingMode>().toPropertyValue<mbgl::style::PropertyValue<mbgl::style::RasterResamplingType>>(rasterResamplingMode, false);
+    self.rawLayer->setRasterResampling(mbglValue);
+}
+
+- (NSExpression *)rasterResamplingMode {
+    MGLAssertStyleLayerIsValid();
+
+    auto propertyValue = self.rawLayer->getRasterResampling();
+    if (propertyValue.isUndefined()) {
+        propertyValue = self.rawLayer->getDefaultRasterResampling();
+    }
+    return MGLStyleValueTransformer<mbgl::style::RasterResamplingType, NSValue *, mbgl::style::RasterResamplingType, MGLRasterResamplingMode>().toExpression(propertyValue);
+}
+
+- (void)setRasterResampling:(NSExpression *)rasterResampling {
+}
+
+- (NSExpression *)rasterResampling {
+    return self.rasterResamplingMode;
+}
+
 - (void)setRasterSaturation:(NSExpression *)rasterSaturation {
     MGLAssertStyleLayerIsValid();
 
-    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterSaturation);
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(rasterSaturation, false);
     self.rawLayer->setRasterSaturation(mbglValue);
 }
 
@@ -285,6 +318,20 @@
     transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
     return transition;
+}
+
+@end
+
+@implementation NSValue (MGLRasterStyleLayerAdditions)
+
++ (NSValue *)valueWithMGLRasterResamplingMode:(MGLRasterResamplingMode)rasterResamplingMode {
+    return [NSValue value:&rasterResamplingMode withObjCType:@encode(MGLRasterResamplingMode)];
+}
+
+- (MGLRasterResamplingMode)MGLRasterResamplingModeValue {
+    MGLRasterResamplingMode rasterResamplingMode;
+    [self getValue:&rasterResamplingMode];
+    return rasterResamplingMode;
 }
 
 @end

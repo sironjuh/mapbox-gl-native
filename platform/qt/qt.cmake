@@ -38,6 +38,11 @@ set(MBGL_QT_CORE_FILES
     PRIVATE platform/qt/src/timer.cpp
     PRIVATE platform/qt/src/timer_impl.hpp
     PRIVATE platform/qt/src/utf.cpp
+
+    PRIVATE platform/default/local_glyph_rasterizer.cpp
+    PRIVATE platform/default/collator.cpp
+    PRIVATE platform/default/unaccent.cpp
+    PRIVATE platform/default/unaccent.hpp
 )
 
 set(MBGL_QT_FILESOURCE_FILES
@@ -65,13 +70,16 @@ add_library(qmapboxgl SHARED
     platform/qt/src/qmapboxgl_map_observer.hpp
     platform/qt/src/qmapboxgl_map_renderer.cpp
     platform/qt/src/qmapboxgl_map_renderer.hpp
-    platform/qt/src/qmapboxgl_renderer_backend.hpp
     platform/qt/src/qmapboxgl_renderer_backend.cpp
+    platform/qt/src/qmapboxgl_renderer_backend.hpp
+    platform/qt/src/qmapboxgl_scheduler.cpp
+    platform/qt/src/qmapboxgl_scheduler.hpp
     platform/default/mbgl/util/default_styles.hpp
 )
 
 target_include_directories(qmapboxgl
     PUBLIC platform/qt/include
+    PRIVATE src
 )
 
 target_compile_definitions(qmapboxgl
@@ -145,13 +153,18 @@ elseif (CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     add_definitions("-Wno-unused-command-line-argument")
     add_definitions("-Wno-unused-local-typedef")
     add_definitions("-Wno-unused-private-field")
+    add_definitions("-Wno-inconsistent-missing-override")
 
     list(APPEND MBGL_QT_CORE_FILES
         PRIVATE platform/qt/src/thread.cpp
     )
 
     target_add_mason_package(qmapboxgl PRIVATE optional)
-    target_add_mason_package(qmapboxgl PRIVATE tao_tuple)
+elseif (CMAKE_HOST_SYSTEM_NAME STREQUAL "QNX")
+    list(APPEND MBGL_QT_CORE_FILES
+        PRIVATE platform/qt/src/thread.cpp
+    )
+    add_definitions("-Wno-narrowing")
 endif()
 
 add_custom_command(

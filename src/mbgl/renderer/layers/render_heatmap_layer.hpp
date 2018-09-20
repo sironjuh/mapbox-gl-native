@@ -16,14 +16,16 @@ public:
     void transition(const TransitionParameters&) override;
     void evaluate(const PropertyEvaluationParameters&) override;
     bool hasTransition() const override;
+    bool hasCrossfade() const override;
     void render(PaintParameters&, RenderSource*) override;
 
     bool queryIntersectsFeature(
             const GeometryCoordinates&,
             const GeometryTileFeature&,
             const float,
+            const TransformState&,
             const float,
-            const float) const override;
+            const mat4&) const override;
 
     void updateColorRamp();
 

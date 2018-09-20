@@ -1,11 +1,14 @@
 buildscript {
+    apply from: "${rootDir}/gradle/dependencies.gradle"
 
     repositories {
         jcenter()
         google()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.0.1'
+        classpath 'com.android.tools.build:gradle:3.1.4'
+        classpath dependenciesList.licensesPlugin
+        classpath dependenciesList.kotlinPlugin
     }
 }
 
@@ -14,15 +17,14 @@ allprojects {
         mavenCentral()
         jcenter()
         google()
-        maven { url "http://oss.sonatype.org/content/repositories/snapshots/" }
+        // Snapshot repository
+        //maven { url "http://oss.sonatype.org/content/repositories/snapshots/" }
     }
 }
 
 subprojects {
     apply from: "${rootDir}/gradle/dependencies.gradle"
 }
-
-apply from: "${rootDir}/gradle/dependencies.gradle"
 
 // Load build system information. If this file does not exist, run
 // `make platform/android/gradle/configuration.gradle`

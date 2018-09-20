@@ -18,7 +18,6 @@ import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
 import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
-import com.mapbox.mapboxsdk.style.functions.stops.Stops;
 import com.mapbox.mapboxsdk.style.layers.SymbolLayer;
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource;
 import com.mapbox.mapboxsdk.testapp.R;
@@ -28,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import static com.mapbox.mapboxsdk.style.functions.Function.property;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.get;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAllowOverlap;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconIgnorePlacement;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconImage;
@@ -265,12 +264,7 @@ public class AnimatedSymbolLayerActivity extends AppCompatActivity {
     symbolLayer.withProperties(
       iconImage(RANDOM_CAR_IMAGE_ID),
       iconAllowOverlap(true),
-      iconRotate(
-        property(
-          PROPERTY_BEARING,
-          Stops.<Float>identity()
-        )
-      ),
+      iconRotate(get(PROPERTY_BEARING)),
       iconIgnorePlacement(true)
     );
 
@@ -322,12 +316,7 @@ public class AnimatedSymbolLayerActivity extends AppCompatActivity {
     SymbolLayer symbolLayer = new SymbolLayer(TAXI_LAYER, TAXI_SOURCE);
     symbolLayer.withProperties(
       iconImage(TAXI),
-      iconRotate(
-        property(
-          PROPERTY_BEARING,
-          Stops.<Float>identity()
-        )
-      ),
+      iconRotate(get(PROPERTY_BEARING)),
       iconAllowOverlap(true),
       iconIgnorePlacement(true)
 

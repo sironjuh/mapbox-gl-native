@@ -2,11 +2,10 @@
 
 #pragma once
 
+#include <mbgl/style/color_ramp_property_value.hpp>
 #include <mbgl/style/layer.hpp>
 #include <mbgl/style/filter.hpp>
 #include <mbgl/style/property_value.hpp>
-#include <mbgl/style/data_driven_property_value.hpp>
-#include <mbgl/style/heatmap_color_property_value.hpp>
 
 #include <mbgl/util/color.hpp>
 
@@ -35,17 +34,21 @@ public:
     void setMinZoom(float) final;
     void setMaxZoom(float) final;
 
+    // Dynamic properties
+    optional<conversion::Error> setLayoutProperty(const std::string& name, const conversion::Convertible& value) final;
+    optional<conversion::Error> setPaintProperty(const std::string& name, const conversion::Convertible& value) final;
+
     // Paint properties
 
-    static DataDrivenPropertyValue<float> getDefaultHeatmapRadius();
-    DataDrivenPropertyValue<float> getHeatmapRadius() const;
-    void setHeatmapRadius(DataDrivenPropertyValue<float>);
+    static PropertyValue<float> getDefaultHeatmapRadius();
+    PropertyValue<float> getHeatmapRadius() const;
+    void setHeatmapRadius(PropertyValue<float>);
     void setHeatmapRadiusTransition(const TransitionOptions&);
     TransitionOptions getHeatmapRadiusTransition() const;
 
-    static DataDrivenPropertyValue<float> getDefaultHeatmapWeight();
-    DataDrivenPropertyValue<float> getHeatmapWeight() const;
-    void setHeatmapWeight(DataDrivenPropertyValue<float>);
+    static PropertyValue<float> getDefaultHeatmapWeight();
+    PropertyValue<float> getHeatmapWeight() const;
+    void setHeatmapWeight(PropertyValue<float>);
     void setHeatmapWeightTransition(const TransitionOptions&);
     TransitionOptions getHeatmapWeightTransition() const;
 
@@ -55,9 +58,9 @@ public:
     void setHeatmapIntensityTransition(const TransitionOptions&);
     TransitionOptions getHeatmapIntensityTransition() const;
 
-    static HeatmapColorPropertyValue getDefaultHeatmapColor();
-    HeatmapColorPropertyValue getHeatmapColor() const;
-    void setHeatmapColor(HeatmapColorPropertyValue);
+    static ColorRampPropertyValue getDefaultHeatmapColor();
+    ColorRampPropertyValue getHeatmapColor() const;
+    void setHeatmapColor(ColorRampPropertyValue);
     void setHeatmapColorTransition(const TransitionOptions&);
     TransitionOptions getHeatmapColorTransition() const;
 

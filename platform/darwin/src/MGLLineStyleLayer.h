@@ -78,9 +78,10 @@ typedef NS_ENUM(NSUInteger, MGLLineTranslationAnchor) {
  polylines on the map.
  
  Use a line style layer to configure the visual appearance of polyline or
- multipolyline features in vector tiles loaded by an `MGLVectorSource` object or
- `MGLPolyline`, `MGLPolylineFeature`, `MGLMultiPolyline`, or
- `MGLMultiPolylineFeature` instances in an `MGLShapeSource` object.
+ multipolyline features. These features can come from vector tiles loaded by an
+ `MGLVectorTileSource` object, or they can be `MGLPolyline`,
+ `MGLPolylineFeature`, `MGLMultiPolyline`, or `MGLMultiPolylineFeature`
+ instances in an `MGLShapeSource` or `MGLComputedShapeSource` object.
 
  You can access an existing line style layer using the
  `-[MGLStyle layerWithIdentifier:]` method if you know its identifier;
@@ -93,7 +94,7 @@ typedef NS_ENUM(NSUInteger, MGLLineTranslationAnchor) {
  ```swift
  let layer = MGLLineStyleLayer(identifier: "trails-path", source: trails)
  layer.sourceLayerIdentifier = "trails"
- layer.lineWidth = NSExpression(format: "FUNCTION($zoomLevel, 'mgl_interpolateWithCurveType:parameters:stops:', 'exponential', 1.5, %@)",
+ layer.lineWidth = NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'exponential', 1.5, %@)",
                                 [14: 2,
                                  18: 20])
  layer.lineColor = NSExpression(forConstantValue: UIColor.brown)
@@ -231,7 +232,7 @@ MGL_EXPORT
  
  You can set this property to an expression containing any of the following:
  
- * Constant numeric values
+ * Constant numeric values no less than 0
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables
@@ -247,6 +248,7 @@ MGL_EXPORT
 */
 @property (nonatomic) MGLTransition lineBlurTransition;
 
+#if TARGET_OS_IPHONE
 /**
  The color with which the line will be drawn.
  
@@ -267,6 +269,28 @@ MGL_EXPORT
  feature attributes
  */
 @property (nonatomic, null_resettable) NSExpression *lineColor;
+#else
+/**
+ The color with which the line will be drawn.
+ 
+ The default value of this property is an expression that evaluates to
+ `NSColor.blackColor`. Set this property to `nil` to reset it to the default
+ value.
+ 
+ This property is only applied to the style if `linePattern` is set to `nil`.
+ Otherwise, it is ignored.
+ 
+ You can set this property to an expression containing any of the following:
+ 
+ * Constant `NSColor` values
+ * Predefined functions, including mathematical and string operators
+ * Conditional expressions
+ * Variable assignments and references to assigned variables
+ * Interpolation and step functions applied to the `$zoomLevel` variable and/or
+ feature attributes
+ */
+@property (nonatomic, null_resettable) NSExpression *lineColor;
+#endif
 
 /**
  The transition affecting any changes to this layer’s `lineColor` property.
@@ -278,7 +302,10 @@ MGL_EXPORT
 /**
  Specifies the lengths of the alternating dashes and gaps that form the dash
  pattern. The lengths are later scaled by the line width. To convert a dash
- length to points, multiply the length by the current line width.
+ length to points, multiply the length by the current line width. Note that
+ GeoJSON sources with `lineMetrics: true` specified won't render dashed lines to
+ the expected scale. Also note that zoom-dependent expressions will be evaluated
+ only at integer zoom levels.
  
  This property is measured in line widths.
  
@@ -291,7 +318,7 @@ MGL_EXPORT
  
  You can set this property to an expression containing any of the following:
  
- * Constant array values
+ * Constant array values no less than 0
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables
@@ -323,7 +350,7 @@ MGL_EXPORT
  
  You can set this property to an expression containing any of the following:
  
- * Constant numeric values
+ * Constant numeric values no less than 0
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables
@@ -338,6 +365,50 @@ MGL_EXPORT
  This property corresponds to the `line-gap-width-transition` property in the style JSON file format.
 */
 @property (nonatomic) MGLTransition lineGapWidthTransition;
+
+#if TARGET_OS_IPHONE
+/**
+ Defines a gradient with which to color a line feature. Can only be used with
+ GeoJSON sources that specify `"lineMetrics": true`.
+ 
+ This property is only applied to the style if `lineDasharray` is set to `nil`,
+ and `linePattern` is set to `nil`, and the data source requirements are met.
+ Otherwise, it is ignored.
+ 
+ You can set this property to an expression containing any of the following:
+ 
+ * Constant `UIColor` values
+ * Predefined functions, including mathematical and string operators
+ * Conditional expressions
+ * Variable assignments and references to assigned variables
+ * Interpolation and step functions applied to the `$lineProgress` variable
+ 
+ This property does not support applying interpolation or step functions to
+ feature attributes.
+ */
+@property (nonatomic, null_resettable) NSExpression *lineGradient;
+#else
+/**
+ Defines a gradient with which to color a line feature. Can only be used with
+ GeoJSON sources that specify `"lineMetrics": true`.
+ 
+ This property is only applied to the style if `lineDasharray` is set to `nil`,
+ and `linePattern` is set to `nil`, and the data source requirements are met.
+ Otherwise, it is ignored.
+ 
+ You can set this property to an expression containing any of the following:
+ 
+ * Constant `NSColor` values
+ * Predefined functions, including mathematical and string operators
+ * Conditional expressions
+ * Variable assignments and references to assigned variables
+ * Interpolation and step functions applied to the `$lineProgress` variable
+ 
+ This property does not support applying interpolation or step functions to
+ feature attributes.
+ */
+@property (nonatomic, null_resettable) NSExpression *lineGradient;
+#endif
 
 /**
  The line's offset. For linear features, a positive value offsets the line to
@@ -376,7 +447,7 @@ MGL_EXPORT
  
  You can set this property to an expression containing any of the following:
  
- * Constant numeric values
+ * Constant numeric values between 0 and 1 inclusive
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables
@@ -402,11 +473,8 @@ MGL_EXPORT
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables
- * Step functions applied to the `$zoomLevel` variable
- 
- This property does not support applying interpolation functions to the
- `$zoomLevel` variable or applying interpolation or step functions to feature
- attributes.
+ * Interpolation and step functions applied to the `$zoomLevel` variable and/or
+ feature attributes
  */
 @property (nonatomic, null_resettable) NSExpression *linePattern;
 
@@ -522,7 +590,7 @@ MGL_EXPORT
  
  You can set this property to an expression containing any of the following:
  
- * Constant numeric values
+ * Constant numeric values no less than 0
  * Predefined functions, including mathematical and string operators
  * Conditional expressions
  * Variable assignments and references to assigned variables

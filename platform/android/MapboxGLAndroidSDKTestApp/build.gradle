@@ -8,9 +8,12 @@ android {
         applicationId "com.mapbox.mapboxsdk.testapp"
         minSdkVersion androidVersions.minSdkVersion
         targetSdkVersion androidVersions.targetSdkVersion
-        versionCode 12
+        versionCode 13
         versionName "6.0.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
     }
 
     compileOptions {
@@ -34,13 +37,16 @@ android {
 
     buildTypes {
         debug {
-            testCoverageEnabled = true
+            testCoverageEnabled true
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
         }
     }
 
@@ -52,14 +58,15 @@ android {
 }
 
 dependencies {
-    api(project(':MapboxGLAndroidSDK'))
-    implementation dependenciesList.mapboxJavaServices
+    implementation dependenciesList.kotlinLib
 
-    implementation dependenciesList.mapboxJavaTurf
+    implementation(project(':MapboxGLAndroidSDK'))
+    implementation(dependenciesList.mapboxJavaTurf)
 
     implementation dependenciesList.supportAppcompatV7
     implementation dependenciesList.supportRecyclerView
     implementation dependenciesList.supportDesign
+    implementation dependenciesList.supportConstraintLayout
 
     // implementation dependenciesList.lost
     implementation dependenciesList.gmsLocation
@@ -81,3 +88,6 @@ apply from: "${rootDir}/gradle/gradle-checkstyle.gradle"
 apply from: "${rootDir}/gradle/gradle-lint.gradle"
 
 
+
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'

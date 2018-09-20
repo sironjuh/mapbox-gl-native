@@ -1,40 +1,68 @@
 #include "sqlite3.hpp"
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <cstdio>
 #include <chrono>
 #include <experimental/optional>
 
+#include <mbgl/util/traits.hpp>
 #include <mbgl/util/logging.hpp>
 
 namespace mapbox {
 namespace sqlite {
 
+static_assert(mbgl::underlying_type(ResultCode::OK) == SQLITE_OK, "error");
+static_assert(mbgl::underlying_type(ResultCode::Error) == SQLITE_ERROR, "error");
+static_assert(mbgl::underlying_type(ResultCode::Internal) == SQLITE_INTERNAL, "error");
+static_assert(mbgl::underlying_type(ResultCode::Perm) == SQLITE_PERM, "error");
+static_assert(mbgl::underlying_type(ResultCode::Abort) == SQLITE_ABORT, "error");
+static_assert(mbgl::underlying_type(ResultCode::Busy) == SQLITE_BUSY, "error");
+static_assert(mbgl::underlying_type(ResultCode::Locked) == SQLITE_LOCKED, "error");
+static_assert(mbgl::underlying_type(ResultCode::NoMem) == SQLITE_NOMEM, "error");
+static_assert(mbgl::underlying_type(ResultCode::ReadOnly) == SQLITE_READONLY, "error");
+static_assert(mbgl::underlying_type(ResultCode::Interrupt) == SQLITE_INTERRUPT, "error");
+static_assert(mbgl::underlying_type(ResultCode::IOErr) == SQLITE_IOERR, "error");
+static_assert(mbgl::underlying_type(ResultCode::Corrupt) == SQLITE_CORRUPT, "error");
+static_assert(mbgl::underlying_type(ResultCode::NotFound) == SQLITE_NOTFOUND, "error");
+static_assert(mbgl::underlying_type(ResultCode::Full) == SQLITE_FULL, "error");
+static_assert(mbgl::underlying_type(ResultCode::CantOpen) == SQLITE_CANTOPEN, "error");
+static_assert(mbgl::underlying_type(ResultCode::Protocol) == SQLITE_PROTOCOL, "error");
+static_assert(mbgl::underlying_type(ResultCode::Schema) == SQLITE_SCHEMA, "error");
+static_assert(mbgl::underlying_type(ResultCode::TooBig) == SQLITE_TOOBIG, "error");
+static_assert(mbgl::underlying_type(ResultCode::Constraint) == SQLITE_CONSTRAINT, "error");
+static_assert(mbgl::underlying_type(ResultCode::Mismatch) == SQLITE_MISMATCH, "error");
+static_assert(mbgl::underlying_type(ResultCode::Misuse) == SQLITE_MISUSE, "error");
+static_assert(mbgl::underlying_type(ResultCode::NoLFS) == SQLITE_NOLFS, "error");
+static_assert(mbgl::underlying_type(ResultCode::Auth) == SQLITE_AUTH, "error");
+static_assert(mbgl::underlying_type(ResultCode::Range) == SQLITE_RANGE, "error");
+static_assert(mbgl::underlying_type(ResultCode::NotADB) == SQLITE_NOTADB, "error");
+
 class DatabaseImpl {
 public:
-    DatabaseImpl(const char* filename, int flags)
+    DatabaseImpl(sqlite3* db_)
+        : db(db_)
     {
-        const int error = sqlite3_open_v2(filename, &db, flags, nullptr);
+        const int error = sqlite3_extended_result_codes(db, true);
         if (error != SQLITE_OK) {
-            const auto message = sqlite3_errmsg(db);
-            db = nullptr;
-            throw Exception { error, message };
+            mbgl::Log::Warning(mbgl::Event::Database, error, "Failed to enable extended result codes: %s", sqlite3_errmsg(db));
         }
     }
 
     ~DatabaseImpl()
     {
-        if (!db) return;
-
         const int error = sqlite3_close(db);
         if (error != SQLITE_OK) {
-            mbgl::Log::Error(mbgl::Event::Database, "%s (Code %i)", sqlite3_errmsg(db), error);
+            mbgl::Log::Error(mbgl::Event::Database, error, "Failed to close database: %s", sqlite3_errmsg(db));
         }
     }
 
-    sqlite3* db = nullptr;
+    void setBusyTimeout(std::chrono::milliseconds timeout);
+    void exec(const std::string& sql);
+
+    sqlite3* db;
 };
 
 class StatementImpl {
@@ -69,87 +97,8 @@ public:
 template <typename T>
 using optional = std::experimental::optional<T>;
 
-static const char* codeToString(const int err) {
-    switch (err) {
-    case SQLITE_OK: return "SQLITE_OK";
-    case SQLITE_ERROR: return "SQLITE_ERROR";
-    case SQLITE_INTERNAL: return "SQLITE_INTERNAL";
-    case SQLITE_PERM: return "SQLITE_PERM";
-    case SQLITE_ABORT: return "SQLITE_ABORT";
-    case SQLITE_BUSY: return "SQLITE_BUSY";
-    case SQLITE_LOCKED: return "SQLITE_LOCKED";
-    case SQLITE_NOMEM: return "SQLITE_NOMEM";
-    case SQLITE_READONLY: return "SQLITE_READONLY";
-    case SQLITE_INTERRUPT: return "SQLITE_INTERRUPT";
-    case SQLITE_IOERR: return "SQLITE_IOERR";
-    case SQLITE_CORRUPT: return "SQLITE_CORRUPT";
-    case SQLITE_NOTFOUND: return "SQLITE_NOTFOUND";
-    case SQLITE_FULL: return "SQLITE_FULL";
-    case SQLITE_CANTOPEN: return "SQLITE_CANTOPEN";
-    case SQLITE_PROTOCOL: return "SQLITE_PROTOCOL";
-    case SQLITE_EMPTY: return "SQLITE_EMPTY";
-    case SQLITE_SCHEMA: return "SQLITE_SCHEMA";
-    case SQLITE_TOOBIG: return "SQLITE_TOOBIG";
-    case SQLITE_CONSTRAINT: return "SQLITE_CONSTRAINT";
-    case SQLITE_MISMATCH: return "SQLITE_MISMATCH";
-    case SQLITE_MISUSE: return "SQLITE_MISUSE";
-    case SQLITE_NOLFS: return "SQLITE_NOLFS";
-    case SQLITE_AUTH: return "SQLITE_AUTH";
-    case SQLITE_FORMAT: return "SQLITE_FORMAT";
-    case SQLITE_RANGE: return "SQLITE_RANGE";
-    case SQLITE_NOTADB: return "SQLITE_NOTADB";
-    case SQLITE_NOTICE: return "SQLITE_NOTICE";
-    case SQLITE_WARNING: return "SQLITE_WARNING";
-    case SQLITE_ROW: return "SQLITE_ROW";
-    case SQLITE_DONE: return "SQLITE_DONE";
-    default: return "<unknown>";
-    }
-}
-
-static void errorLogCallback(void *, const int err, const char *msg) {
-    auto severity = mbgl::EventSeverity::Info;
-
-    switch (err) {
-        case SQLITE_ERROR:      // Generic error
-        case SQLITE_INTERNAL:   // Internal logic error in SQLite
-        case SQLITE_PERM:       // Access permission denied
-        case SQLITE_ABORT:      // Callback routine requested an abort
-        case SQLITE_BUSY:       // The database file is locked
-        case SQLITE_LOCKED:     // A table in the database is locked
-        case SQLITE_NOMEM:      // A malloc() failed
-        case SQLITE_READONLY:   // Attempt to write a readonly database
-        case SQLITE_INTERRUPT:  // Operation terminated by sqlite3_interrupt(
-        case SQLITE_IOERR:      // Some kind of disk I/O error occurred
-        case SQLITE_CORRUPT:    // The database disk image is malformed
-        case SQLITE_NOTFOUND:   // Unknown opcode in sqlite3_file_control()
-        case SQLITE_FULL:       // Insertion failed because database is full
-        case SQLITE_CANTOPEN:   // Unable to open the database file
-        case SQLITE_PROTOCOL:   // Database lock protocol error
-        case SQLITE_EMPTY:      // Internal use only
-        case SQLITE_SCHEMA:     // The database schema changed
-        case SQLITE_TOOBIG:     // String or BLOB exceeds size limit
-        case SQLITE_CONSTRAINT: // Abort due to constraint violation
-        case SQLITE_MISMATCH:   // Data type mismatch
-        case SQLITE_MISUSE:     // Library used incorrectly
-        case SQLITE_NOLFS:      // Uses OS features not supported on host
-        case SQLITE_AUTH:       // Authorization denied
-        case SQLITE_FORMAT:     // Not used
-        case SQLITE_RANGE:      // 2nd parameter to sqlite3_bind out of range
-        case SQLITE_NOTADB:     // File opened that is not a database file
-            severity = mbgl::EventSeverity::Error;
-            break;
-        case SQLITE_WARNING:    // Warnings from sqlite3_log()
-            severity = mbgl::EventSeverity::Warning;
-            break;
-        case SQLITE_NOTICE:     // Notifications from sqlite3_log()
-        default:
-            break;
-    }
-
-    mbgl::Log::Record(severity, mbgl::Event::Database, "%s (%s)", msg, codeToString(err));
-}
-
-const static bool sqliteVersionCheck __attribute__((unused)) = []() {
+__attribute__((constructor))
+static void initalize() {
     if (sqlite3_libversion_number() / 1000000 != SQLITE_VERSION_NUMBER / 1000000) {
         char message[96];
         snprintf(message, 96,
@@ -158,16 +107,36 @@ const static bool sqliteVersionCheck __attribute__((unused)) = []() {
         throw std::runtime_error(message);
     }
 
+#ifndef NDEBUG
     // Enable SQLite logging before initializing the database.
-    sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, nullptr);
-
-    return true;
-}();
-
-Database::Database(const std::string &filename, int flags)
-    : impl(std::make_unique<DatabaseImpl>(filename.c_str(), flags))
-{
+    sqlite3_config(SQLITE_CONFIG_LOG, [](void *, const int err, const char *msg) {
+        mbgl::Log::Record(mbgl::EventSeverity::Debug, mbgl::Event::Database, err, "%s", msg);
+    }, nullptr);
+#endif
 }
+
+mapbox::util::variant<Database, Exception> Database::tryOpen(const std::string &filename, int flags) {
+    sqlite3* db = nullptr;
+    const int error = sqlite3_open_v2(filename.c_str(), &db, flags | SQLITE_OPEN_URI, nullptr);
+    if (error != SQLITE_OK) {
+        const auto message = sqlite3_errmsg(db);
+        return Exception { error, message };
+    }
+    return Database(std::make_unique<DatabaseImpl>(db));
+}
+
+Database Database::open(const std::string &filename, int flags) {
+    auto result = tryOpen(filename, flags);
+    if (result.is<Exception>()) {
+        throw result.get<Exception>();
+    } else {
+        return std::move(result.get<Database>());
+    }
+}
+
+Database::Database(std::unique_ptr<DatabaseImpl> impl_)
+    : impl(std::move(impl_))
+{}
 
 Database::Database(Database &&other)
     : impl(std::move(other.impl)) {}
@@ -181,23 +150,31 @@ Database::~Database() = default;
 
 void Database::setBusyTimeout(std::chrono::milliseconds timeout) {
     assert(impl);
-    const int err = sqlite3_busy_timeout(impl->db,
+    impl->setBusyTimeout(timeout);
+}
+
+void DatabaseImpl::setBusyTimeout(std::chrono::milliseconds timeout) {
+    const int err = sqlite3_busy_timeout(db,
         int(std::min<std::chrono::milliseconds::rep>(timeout.count(), std::numeric_limits<int>::max())));
     if (err != SQLITE_OK) {
-        throw Exception { err, sqlite3_errmsg(impl->db) };
+        throw Exception { err, sqlite3_errmsg(db) };
     }
 }
 
 void Database::exec(const std::string &sql) {
     assert(impl);
+    impl->exec(sql);
+}
+
+void DatabaseImpl::exec(const std::string& sql) {
     char *msg = nullptr;
-    const int err = sqlite3_exec(impl->db, sql.c_str(), nullptr, nullptr, &msg);
+    const int err = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &msg);
     if (msg) {
         const std::string message = msg;
         sqlite3_free(msg);
         throw Exception { err, message };
     } else if (err != SQLITE_OK) {
-        throw Exception { err, sqlite3_errmsg(impl->db) };
+        throw Exception { err, sqlite3_errmsg(db) };
     }
 }
 
@@ -291,11 +268,12 @@ template <> void Query::bind(int offset, const char *value) {
 }
 
 // We currently cannot use sqlite3_bind_blob64 / sqlite3_bind_text64 because they
-// was introduced in SQLite 3.8.7, and we need to support earlier versions:
-//    iOS 8.0: 3.7.13
-//    iOS 8.2: 3.8.5
-// According to http://stackoverflow.com/questions/14288128/what-version-of-sqlite-does-ios-provide,
-// the first iOS version with 3.8.7+ was 9.0, with 3.8.8.
+// were introduced in SQLite 3.8.7, and we need to support earlier versions:
+//    Android 11: 3.7
+//    Android 21: 3.8
+//    Android 24: 3.9
+// Per https://developer.android.com/reference/android/database/sqlite/package-summary.
+// The first iOS version with 3.8.7+ was 9.0, with 3.8.8.
 
 void Query::bind(int offset, const char * value, std::size_t length, bool retain) {
     assert(stmt.impl);
@@ -469,16 +447,16 @@ uint64_t Query::changes() const {
 }
 
 Transaction::Transaction(Database& db_, Mode mode)
-    : db(db_) {
+    : dbImpl(*db_.impl) {
     switch (mode) {
     case Deferred:
-        db.exec("BEGIN DEFERRED TRANSACTION");
+        dbImpl.exec("BEGIN DEFERRED TRANSACTION");
         break;
     case Immediate:
-        db.exec("BEGIN IMMEDIATE TRANSACTION");
+        dbImpl.exec("BEGIN IMMEDIATE TRANSACTION");
         break;
     case Exclusive:
-        db.exec("BEGIN EXCLUSIVE TRANSACTION");
+        dbImpl.exec("BEGIN EXCLUSIVE TRANSACTION");
         break;
     }
 }
@@ -495,12 +473,12 @@ Transaction::~Transaction() {
 
 void Transaction::commit() {
     needRollback = false;
-    db.exec("COMMIT TRANSACTION");
+    dbImpl.exec("COMMIT TRANSACTION");
 }
 
 void Transaction::rollback() {
     needRollback = false;
-    db.exec("ROLLBACK TRANSACTION");
+    dbImpl.exec("ROLLBACK TRANSACTION");
 }
 
 } // namespace sqlite

@@ -5,21 +5,17 @@
 #include <stdexcept>
 #include <chrono>
 #include <memory>
+#include <mapbox/variant.hpp>
 
 namespace mapbox {
 namespace sqlite {
 
 enum OpenFlag : int {
-    ReadOnly = 0x00000001,
-    ReadWrite = 0x00000002,
-    Create = 0x00000004,
-    NoMutex = 0x00008000,
-    FullMutex = 0x00010000,
-    SharedCache = 0x00020000,
-    PrivateCache = 0x00040000,
+    ReadOnly        = 0b001,
+    ReadWriteCreate = 0b110,
 };
 
-enum class ResultCode : int {
+enum class ResultCode : uint8_t {
     OK = 0,
     Error = 1,
     Internal = 2,
@@ -44,38 +40,43 @@ enum class ResultCode : int {
     NoLFS = 22,
     Auth = 23,
     Range = 25,
-    NotADB = 26
+    NotADB = 26,
+};
+
+enum class ExtendedResultCode : uint8_t {
+    Unknown = 0,
+    ReadOnlyDBMoved = 4,
 };
 
 class Exception : public std::runtime_error {
 public:
-    Exception(int err, const char* msg)
-        : std::runtime_error(msg), code(static_cast<ResultCode>(err)) {
-    }
-    Exception(ResultCode err, const char* msg)
-        : std::runtime_error(msg), code(err) {
-    }
+    Exception(ResultCode err, const char* msg) : Exception(static_cast<int>(err), msg) {}
+    Exception(int err, const char* msg) : Exception(err, std::string{ msg }) {}
     Exception(int err, const std::string& msg)
-        : std::runtime_error(msg), code(static_cast<ResultCode>(err)) {
-    }
-    Exception(ResultCode err, const std::string& msg)
-        : std::runtime_error(msg), code(err) {
+        : std::runtime_error(msg),
+          code(static_cast<ResultCode>(err)),
+          extendedCode(static_cast<ExtendedResultCode>(err >> 8)) {
     }
     const ResultCode code = ResultCode::OK;
+    const ExtendedResultCode extendedCode = ExtendedResultCode::Unknown;
 };
 
 class DatabaseImpl;
 class Statement;
 class StatementImpl;
 class Query;
+class Transaction;
 
 class Database {
 private:
+    Database(std::unique_ptr<DatabaseImpl>);
     Database(const Database &) = delete;
     Database &operator=(const Database &) = delete;
 
 public:
-    Database(const std::string &filename, int flags = 0);
+    static mapbox::util::variant<Database, Exception> tryOpen(const std::string &filename, int flags = 0);
+    static Database open(const std::string &filename, int flags = 0);
+
     Database(Database &&);
     ~Database();
     Database &operator=(Database &&);
@@ -87,6 +88,7 @@ private:
     std::unique_ptr<DatabaseImpl> impl;
 
     friend class Statement;
+    friend class Transaction;
 };
 
 // A Statement object represents a prepared statement that can be run repeatedly run with a Query object.
@@ -169,7 +171,7 @@ public:
     void rollback();
 
 private:
-    Database& db;
+    DatabaseImpl& dbImpl;
     bool needRollback = true;
 };
 

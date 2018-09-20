@@ -280,7 +280,7 @@ ScreenCoordinate TransformState::latLngToScreenCoordinate(const LatLng& latLng) 
 
     mat4 mat = coordinatePointMatrix(getZoom());
     vec4 p;
-    Point<double> pt = Projection::project(latLng, scale) / double(util::tileSize);
+    Point<double> pt = Projection::project(latLng, scale) / util::tileSize;
     vec4 c = {{ pt.x, pt.y, 0, 1 }};
     matrix::transformMat4(p, c, mat);
     return { p[0] / p[3], size.height - p[1] / p[3] };
@@ -419,6 +419,19 @@ float TransformState::getCameraToTileDistance(const UnwrappedTileID& tileID) con
     vec4 projectedCenter;
     matrix::transformMat4(projectedCenter, tileCenter, tileProjectionMatrix);
     return projectedCenter[3];
+}
+
+float TransformState::maxPitchScaleFactor() const {
+    if (size.isEmpty()) {
+        return {};
+    }
+    auto latLng = screenCoordinateToLatLng({ 0, static_cast<float>(getSize().height) });
+    mat4 mat = coordinatePointMatrix(getZoom());
+    Point<double> pt = Projection::project(latLng, scale) / util::tileSize;
+    vec4 p = {{ pt.x, pt.y, 0, 1 }};
+    vec4 topPoint;
+    matrix::transformMat4(topPoint, p, mat);
+    return topPoint[3] / getCameraToCenterDistance();
 }
 
 } // namespace mbgl

@@ -198,8 +198,8 @@ public:
     void updateAnnotation(QMapbox::AnnotationID, const QMapbox::Annotation &);
     void removeAnnotation(QMapbox::AnnotationID);
 
-    void setLayoutProperty(const QString &layer, const QString &property, const QVariant &value);
-    void setPaintProperty(const QString &layer, const QString &property, const QVariant &value);
+    bool setLayoutProperty(const QString &layer, const QString &property, const QVariant &value);
+    bool setPaintProperty(const QString &layer, const QString &property, const QVariant &value);
 
     bool isFullyLoaded() const;
 
@@ -230,17 +230,16 @@ public:
     void removeImage(const QString &name);
 
     void addCustomLayer(const QString &id,
-        QMapbox::CustomLayerInitializeFunction,
-        QMapbox::CustomLayerRenderFunction,
-        QMapbox::CustomLayerDeinitializeFunction,
-        void* context,
+        QScopedPointer<QMapbox::CustomLayerHostInterface>& host,
         const QString& before = QString());
     void addLayer(const QVariantMap &params, const QString& before = QString());
     bool layerExists(const QString &id);
     void removeLayer(const QString &id);
 
-    void setFilter(const QString &layer, const QVariant &filter);
+    QList<QString> layerIds() const;
 
+    void setFilter(const QString &layer, const QVariant &filter);
+    QVariant getFilter(const QString &layer) const;
     // When rendering on a different thread,
     // should be called on the render thread.
     void createRenderer();

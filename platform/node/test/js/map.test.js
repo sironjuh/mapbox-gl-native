@@ -114,6 +114,7 @@ test('Map', function(t) {
             'removeLayer',
             'addImage',
             'removeImage',
+            'setLayerZoomRange',
             'setLayoutProperty',
             'setPaintProperty',
             'setFilter',
@@ -322,6 +323,10 @@ test('Map', function(t) {
                 map.load('""');
             }, /Failed to parse style: style must be an object/);
 
+            t.throws(function() {
+                map.load('""');
+            }, mbgl.ParseError);
+
             map.release();
             t.end();
         });
@@ -337,6 +342,10 @@ test('Map', function(t) {
                 map.release();
                 t.end();
             });
+
+            t.throws(function() {
+                map.load('invalid');
+            }, mbgl.ParseError);
 
             t.throws(function() {
                 map.load('invalid');
@@ -531,7 +540,7 @@ test('Map', function(t) {
             t.throws(function() {
                 map.render({}, function() {});
                 map.render({}, function() {});
-            }, /Map is currently rendering an image/);
+            }, /Map is currently processing a RenderRequest/);
 
             map.release();
             t.end();

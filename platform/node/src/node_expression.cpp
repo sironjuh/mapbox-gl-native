@@ -52,7 +52,7 @@ type::Type parseType(v8::Local<v8::Object> type) {
 
         v8::Local<v8::String> Nkey = Nan::New("N").ToLocalChecked();
         if (Nan::Has(type, Nkey).FromMaybe(false)) {
-            N = Nan::Get(type, Nkey).ToLocalChecked()->ToInt32()->Value();
+            N = Nan::To<v8::Int32>(Nan::Get(type, Nkey).ToLocalChecked()).ToLocalChecked()->Value();
         }
         return type::Array(itemType, N);
     }
@@ -75,8 +75,8 @@ void NodeExpression::Parse(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     auto expr = info[0];
 
     try {
-        ParsingContext ctx(expected);
-        ParseResult parsed = ctx.parse(mbgl::style::conversion::Convertible(expr));
+        ParsingContext ctx = expected ? ParsingContext(*expected) : ParsingContext();
+        ParseResult parsed = ctx.parseLayerPropertyExpression(mbgl::style::conversion::Convertible(expr));
         if (parsed) {
             assert(ctx.getErrors().size() == 0);
             auto nodeExpr = new NodeExpression(std::move(*parsed));
@@ -142,6 +142,14 @@ struct ToValue {
             result->Set(i, toJS(array[i]));
         }
         return scope.Escape(result);
+    }
+
+    v8::Local<v8::Value> operator()(const Collator&) {
+        // Collators are excluded from constant folding and there's no Literal parser
+        // for them so there shouldn't be any way to serialize this value.
+        assert(false);
+        Nan::EscapableHandleScope scope;
+        return scope.Escape(Nan::Null());
     }
 
     v8::Local<v8::Value> operator()(const mbgl::Color& color) {

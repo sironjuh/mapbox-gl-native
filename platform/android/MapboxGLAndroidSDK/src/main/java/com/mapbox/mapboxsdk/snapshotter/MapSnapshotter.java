@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.os.Handler;
+import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
@@ -16,7 +17,6 @@ import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
 import com.mapbox.mapboxsdk.R;
 import com.mapbox.mapboxsdk.attribution.AttributionLayout;
 import com.mapbox.mapboxsdk.attribution.AttributionMeasure;
@@ -24,9 +24,9 @@ import com.mapbox.mapboxsdk.attribution.AttributionParser;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.constants.Style;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
+import com.mapbox.mapboxsdk.log.Logger;
 import com.mapbox.mapboxsdk.storage.FileSource;
-
-import timber.log.Timber;
+import com.mapbox.mapboxsdk.utils.ThreadUtils;
 
 /**
  * The map snapshotter creates a large of the map, rendered
@@ -35,6 +35,8 @@ import timber.log.Timber;
  */
 @UiThread
 public class MapSnapshotter {
+
+  private static final String TAG = "Mbgl-MapSnapshotter";
 
   /**
    * Get notified on snapshot completion.
@@ -72,6 +74,7 @@ public class MapSnapshotter {
   private static final int LOGO_MARGIN_DP = 4;
 
   // Holds the pointer to JNI NativeMapView
+  @Keep
   private long nativePtr = 0;
 
   private final Context context;
@@ -82,10 +85,11 @@ public class MapSnapshotter {
    * MapSnapshotter options
    */
   public static class Options {
-    private int pixelRatio = 1;
+    private float pixelRatio = 1;
     private int width;
     private int height;
     private String styleUrl = Style.MAPBOX_STREETS;
+    private String styleJson;
     private LatLngBounds region;
     private CameraPosition cameraPosition;
     private boolean showLogo = true;
@@ -95,6 +99,9 @@ public class MapSnapshotter {
      * @param height the height of the image
      */
     public Options(int width, int height) {
+      if (width == 0 || height == 0) {
+        throw new IllegalArgumentException("Unable to create a snapshot with width or height set to 0");
+      }
       this.width = width;
       this.height = height;
     }
@@ -105,6 +112,15 @@ public class MapSnapshotter {
      */
     public Options withStyle(String url) {
       this.styleUrl = url;
+      return this;
+    }
+
+    /**
+     * @param styleJson The style json to use
+     * @return the mutated {@link Options}
+     */
+    public Options withStyleJson(String styleJson) {
+      this.styleJson = styleJson;
       return this;
     }
 
@@ -122,7 +138,7 @@ public class MapSnapshotter {
      * @param pixelRatio the pixel ratio to use (default: 1)
      * @return the mutated {@link Options}
      */
-    public Options withPixelRatio(int pixelRatio) {
+    public Options withPixelRatio(float pixelRatio) {
       this.pixelRatio = pixelRatio;
       return this;
     }
@@ -164,7 +180,7 @@ public class MapSnapshotter {
     /**
      * @return the pixel ratio
      */
-    public int getPixelRatio() {
+    public float getPixelRatio() {
       return pixelRatio;
     }
 
@@ -200,12 +216,13 @@ public class MapSnapshotter {
    * @param options the options to use for the snapshot
    */
   public MapSnapshotter(@NonNull Context context, @NonNull Options options) {
+    checkThread();
     this.context = context.getApplicationContext();
     FileSource fileSource = FileSource.getInstance(context);
-    String programCacheDir = context.getCacheDir().getAbsolutePath();
+    String programCacheDir = FileSource.getInternalCachePath(context);
 
     nativeInitialize(this, fileSource, options.pixelRatio, options.width,
-      options.height, options.styleUrl, options.region, options.cameraPosition,
+      options.height, options.styleUrl, options.styleJson, options.region, options.cameraPosition,
       options.showLogo, programCacheDir);
   }
 
@@ -230,7 +247,7 @@ public class MapSnapshotter {
     if (this.callback != null) {
       throw new IllegalStateException("Snapshotter was already started");
     }
-
+    checkThread();
     this.callback = callback;
     this.errorHandler = errorHandler;
     nativeStart();
@@ -242,6 +259,7 @@ public class MapSnapshotter {
    * @param width  the width
    * @param height the height
    */
+  @Keep
   public native void setSize(int width, int height);
 
   /**
@@ -249,6 +267,7 @@ public class MapSnapshotter {
    *
    * @param cameraPosition the camera position
    */
+  @Keep
   public native void setCameraPosition(CameraPosition cameraPosition);
 
   /**
@@ -256,6 +275,7 @@ public class MapSnapshotter {
    *
    * @param region the region
    */
+  @Keep
   public native void setRegion(LatLngBounds region);
 
   /**
@@ -263,14 +283,23 @@ public class MapSnapshotter {
    *
    * @param styleUrl the style url
    */
+  @Keep
   public native void setStyleUrl(String styleUrl);
 
+  /**
+   * Updates the snapshotter with a new style json
+   *
+   * @param styleJson the style json
+   */
+  @Keep
+  public native void setStyleJson(String styleJson);
 
   /**
    * Must be called in on the thread
    * the object was created on.
    */
   public void cancel() {
+    checkThread();
     reset();
     nativeCancel();
   }
@@ -330,9 +359,10 @@ public class MapSnapshotter {
       drawAttribution(canvas, measure, anchorPoint);
     } else {
       Bitmap snapshot = mapSnapshot.getBitmap();
-      Timber.e("Could not generate attribution for snapshot size: %s x %s."
+      Logger.e(TAG, String.format("Could not generate attribution for snapshot size: %s x %s."
           + " You are required to provide your own attribution for the used sources: %s",
-        snapshot.getWidth(), snapshot.getHeight(), mapSnapshot.getAttributions());
+        snapshot.getWidth(), snapshot.getHeight(), mapSnapshot.getAttributions())
+      );
     }
   }
 
@@ -426,6 +456,7 @@ public class MapSnapshotter {
    *
    * @param snapshot the generated snapshot
    */
+  @Keep
   protected void onSnapshotReady(final MapSnapshot snapshot) {
     new Handler().post(new Runnable() {
       @Override
@@ -445,6 +476,7 @@ public class MapSnapshotter {
    *
    * @param reason the exception string
    */
+  @Keep
   protected void onSnapshotFailed(String reason) {
     if (errorHandler != null) {
       errorHandler.onError(reason);
@@ -452,22 +484,30 @@ public class MapSnapshotter {
     }
   }
 
+  private void checkThread() {
+    ThreadUtils.checkThread("MapSnapshotter");
+  }
+
   protected void reset() {
     callback = null;
     errorHandler = null;
   }
 
+  @Keep
   protected native void nativeInitialize(MapSnapshotter mapSnapshotter,
                                          FileSource fileSource, float pixelRatio,
-                                         int width, int height, String styleUrl,
+                                         int width, int height, String styleUrl, String styleJson,
                                          LatLngBounds region, CameraPosition position,
                                          boolean showLogo, String programCacheDir);
 
+  @Keep
   protected native void nativeStart();
 
+  @Keep
   protected native void nativeCancel();
 
   @Override
+  @Keep
   protected native void finalize() throws Throwable;
 
   private class Logo {

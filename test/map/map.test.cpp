@@ -84,7 +84,21 @@ TEST(Map, LatLngBoundsToCameraWithAngle) {
     CameraOptions virtualCamera = test.map.cameraForLatLngBounds(bounds, {}, 35);
     ASSERT_TRUE(bounds.contains(*virtualCamera.center));
     EXPECT_NEAR(*virtualCamera.zoom, 1.21385, 1e-5);
-    EXPECT_DOUBLE_EQ(virtualCamera.angle.value_or(0), -35 * util::DEG2RAD);
+    EXPECT_NEAR(virtualCamera.angle.value_or(0), -35 * util::DEG2RAD, 1e-5);
+}
+
+TEST(Map, LatLngBoundsToCameraWithAngleAndPitch) {
+    MapTest<> test;
+    
+    test.map.setLatLngZoom({ 40.712730, -74.005953 }, 16.0);
+    
+    LatLngBounds bounds = LatLngBounds::hull({15.68169,73.499857}, {53.560711, 134.77281});
+    
+    CameraOptions virtualCamera = test.map.cameraForLatLngBounds(bounds, {}, 35, 20);
+    ASSERT_TRUE(bounds.contains(*virtualCamera.center));
+    EXPECT_NEAR(*virtualCamera.zoom, 13.66272, 1e-5);
+    ASSERT_DOUBLE_EQ(*virtualCamera.pitch, 20 * util::DEG2RAD);
+    EXPECT_NEAR(virtualCamera.angle.value_or(0), -35 * util::DEG2RAD, 1e-5);
 }
 
 TEST(Map, LatLngsToCamera) {
@@ -93,11 +107,25 @@ TEST(Map, LatLngsToCamera) {
     std::vector<LatLng> latLngs{{ 40.712730, 74.005953 }, {15.68169,73.499857}, {30.82678, 83.4082}};
 
     CameraOptions virtualCamera = test.map.cameraForLatLngs(latLngs, {}, 23);
-    EXPECT_DOUBLE_EQ(virtualCamera.angle.value_or(0), -23 * util::DEG2RAD);
+    EXPECT_NEAR(virtualCamera.angle.value_or(0), -23 * util::DEG2RAD, 1e-5);
     EXPECT_NEAR(virtualCamera.zoom.value_or(0), 2.75434, 1e-5);
     EXPECT_NEAR(virtualCamera.center->latitude(), 28.49288, 1e-5);
     EXPECT_NEAR(virtualCamera.center->longitude(), 74.97437, 1e-5);
 }
+
+TEST(Map, LatLngsToCameraWithAngleAndPitch) {
+    MapTest<> test;
+    
+    std::vector<LatLng> latLngs{{ 40.712730, 74.005953 }, {15.68169,73.499857}, {30.82678, 83.4082}};
+    
+    CameraOptions virtualCamera = test.map.cameraForLatLngs(latLngs, {}, 23, 20);
+    EXPECT_NEAR(virtualCamera.angle.value_or(0), -23 * util::DEG2RAD, 1e-5);
+    EXPECT_NEAR(virtualCamera.zoom.value_or(0), 3.04378, 1e-5);
+    EXPECT_NEAR(virtualCamera.center->latitude(), 28.53718, 1e-5);
+    EXPECT_NEAR(virtualCamera.center->longitude(), 74.31746, 1e-5);
+    ASSERT_DOUBLE_EQ(*virtualCamera.pitch, 20 * util::DEG2RAD);
+}
+
 
 TEST(Map, CameraToLatLngBounds) {
     MapTest<> test;
@@ -179,7 +207,7 @@ TEST(Map, SetStyleInvalidJSON) {
     EXPECT_TRUE(fail);
 
     auto observer = Log::removeObserver();
-    auto flo = dynamic_cast<FixtureLogObserver*>(observer.get());
+    auto flo = static_cast<FixtureLogObserver*>(observer.get());
     EXPECT_EQ(1u, flo->count({ EventSeverity::Error, Event::ParseStyle, -1,
         "Failed to parse style: 0 - Invalid value." }));
     auto unchecked = flo->unchecked();
@@ -624,4 +652,53 @@ TEST(Map, NoContentTiles) {
                      test.frontend.render(test.map),
                      0.0015,
                      0.1);
+}
+
+// https://github.com/mapbox/mapbox-gl-native/issues/12432
+TEST(Map, Issue12432) {
+    MapTest<> test { 1, MapMode::Continuous };
+
+    test.fileSource.tileResponse = [&](const Resource&) {
+        Response result;
+        result.data = std::make_shared<std::string>(util::read_file("test/fixtures/map/issue12432/0-0-0.mvt"));
+        return result;
+    };
+
+    test.map.getStyle().loadJSON(R"STYLE({
+      "version": 8,
+      "sources": {
+        "mapbox": {
+          "type": "vector",
+          "tiles": ["http://example.com/{z}-{x}-{y}.vector.pbf"]
+        }
+      },
+      "layers": [{
+        "id": "water",
+        "type": "fill",
+        "source": "mapbox",
+        "source-layer": "water"
+      }]
+    })STYLE");
+
+    test.observer.didFinishLoadingMapCallback = [&]() {
+        test.map.getStyle().loadJSON(R"STYLE({
+          "version": 8,
+          "sources": {
+            "mapbox": {
+              "type": "vector",
+              "tiles": ["http://example.com/{z}-{x}-{y}.vector.pbf"]
+            }
+          },
+          "layers": [{
+            "id": "water",
+            "type": "line",
+            "source": "mapbox",
+            "source-layer": "water"
+          }]
+        })STYLE");
+
+        test.runLoop.stop();
+    };
+
+    test.runLoop.run();
 }

@@ -13,11 +13,11 @@
 #include <mbgl/math/log2.hpp>
 #include <mbgl/math/minmax.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/style/conversion.hpp>
 #include <mbgl/style/conversion/layer.hpp>
 #include <mbgl/style/conversion/source.hpp>
 #include <mbgl/style/conversion/filter.hpp>
 #include <mbgl/style/conversion/geojson.hpp>
+#include <mbgl/style/conversion_impl.hpp>
 #include <mbgl/style/filter.hpp>
 #include <mbgl/style/layers/custom_layer.hpp>
 #include <mbgl/style/layers/background_layer.hpp>
@@ -27,6 +27,7 @@
 #include <mbgl/style/layers/line_layer.hpp>
 #include <mbgl/style/layers/raster_layer.hpp>
 #include <mbgl/style/layers/symbol_layer.hpp>
+#include <mbgl/style/rapidjson_conversion.hpp>
 #include <mbgl/style/sources/geojson_source.hpp>
 #include <mbgl/style/transition_options.hpp>
 #include <mbgl/style/image.hpp>
@@ -38,6 +39,7 @@
 #include <mbgl/util/geo.hpp>
 #include <mbgl/util/geometry.hpp>
 #include <mbgl/util/projection.hpp>
+#include <mbgl/util/rapidjson.hpp>
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/util/shared_thread_pool.hpp>
 #include <mbgl/util/traits.hpp>
@@ -55,8 +57,14 @@
 #include <QString>
 #include <QStringList>
 #include <QThreadStorage>
+#include <QVariant>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QColor>
 
+#include <functional>
 #include <memory>
+#include <sstream>
 
 using namespace QMapbox;
 
@@ -89,15 +97,33 @@ QThreadStorage<std::shared_ptr<mbgl::util::RunLoop>> loop;
 
 std::shared_ptr<mbgl::DefaultFileSource> sharedDefaultFileSource(
         const std::string& cachePath, const std::string& assetRoot, uint64_t maximumCacheSize) {
-    static std::weak_ptr<mbgl::DefaultFileSource> weak;
-    auto fs = weak.lock();
+    static std::mutex mutex;
+    static std::unordered_map<std::string, std::weak_ptr<mbgl::DefaultFileSource>> fileSources;
 
-    if (!fs) {
-        weak = fs = std::make_shared<mbgl::DefaultFileSource>(
-                cachePath, assetRoot, maximumCacheSize);
+    std::lock_guard<std::mutex> lock(mutex);
+
+    // Purge entries no longer in use.
+    for (auto it = fileSources.begin(); it != fileSources.end();) {
+        if (!it->second.lock()) {
+            it = fileSources.erase(it);
+        } else {
+            ++it;
+        }
     }
 
-    return fs;
+    // Return an existing FileSource if available.
+    auto sharedFileSource = fileSources.find(cachePath);
+    if (sharedFileSource != fileSources.end()) {
+        return sharedFileSource->second.lock();
+    }
+
+    // New path, create a new FileSource.
+    auto newFileSource = std::make_shared<mbgl::DefaultFileSource>(
+        cachePath, assetRoot, maximumCacheSize);
+
+    fileSources[cachePath] = newFileSource;
+
+    return newFileSource;
 }
 
 // Conversion helper functions.
@@ -141,10 +167,9 @@ std::unique_ptr<mbgl::style::Image> toStyleImage(const QString &id, const QImage
     QMapboxGLSettings is used to configure QMapboxGL at the moment of its creation.
     Once created, the QMapboxGLSettings of a QMapboxGL can no longer be changed.
 
-    Cache-related settings are shared between all QMapboxGL instances because different
-    maps will share the same cache database file. The first map to configure cache properties
-    such as size and path will force the configuration to all newly instantiated QMapboxGL
-    objects.
+    Cache-related settings are shared between all QMapboxGL instances using the same cache path.
+    The first map to configure cache properties such as size will force the configuration
+    to all newly instantiated QMapboxGL objects using the same cache in the same process.
 
     \since 4.7
 */
@@ -686,7 +711,7 @@ double QMapboxGL::scale() const
 
 void QMapboxGL::setScale(double scale_, const QPointF &center)
 {
-    d_ptr->mapObj->setZoom(mbgl::util::log2(scale_), mbgl::ScreenCoordinate { center.x(), center.y() });
+    d_ptr->mapObj->setZoom(::log2(scale_), mbgl::ScreenCoordinate { center.x(), center.y() });
 }
 
 /*!
@@ -954,7 +979,11 @@ void QMapboxGL::removeAnnotation(QMapbox::AnnotationID id)
 /*!
     Sets a layout \a property_ \a value to an existing \a layer. The \a property_ string can be any
     as defined by the \l {https://www.mapbox.com/mapbox-gl-style-spec/} {Mapbox style specification}
-    for layout properties.
+    for layout properties. Returns true if the operation succeeds, and false otherwise.
+
+    The implementation attempts to treat \a value as a JSON string, if the
+    QVariant inner type is a string. If not a valid JSON string, then it'll
+    proceed with the mapping described below.
 
     This example hides the layer \c route:
 
@@ -986,26 +1015,19 @@ void QMapboxGL::removeAnnotation(QMapbox::AnnotationID id)
         \li QVariantList
     \endtable
 */
-void QMapboxGL::setLayoutProperty(const QString& layer, const QString& property_, const QVariant& value)
+bool QMapboxGL::setLayoutProperty(const QString& layer, const QString& propertyName, const QVariant& value)
 {
-    using namespace mbgl::style;
-
-    Layer* layer_ = d_ptr->mapObj->getStyle().getLayer(layer.toStdString());
-    if (!layer_) {
-        qWarning() << "Layer not found:" << layer;
-        return;
-    }
-
-    if (conversion::setLayoutProperty(*layer_, property_.toStdString(), value)) {
-        qWarning() << "Error setting layout property:" << layer << "-" << property_;
-        return;
-    }
+    return d_ptr->setProperty(&mbgl::style::Layer::setLayoutProperty, layer, propertyName, value);
 }
 
 /*!
     Sets a paint \a property_ \a value to an existing \a layer. The \a property_ string can be any
     as defined by the \l {https://www.mapbox.com/mapbox-gl-style-spec/} {Mapbox style specification}
-    for paint properties.
+    for paint properties. Returns true if the operation succeeds, and false otherwise.
+
+    The implementation attempts to treat \a value as a JSON string, if the
+    QVariant inner type is a string. If not a valid JSON string, then it'll
+    proceed with the mapping described below.
 
     For paint properties that take a color as \a value, such as \c fill-color, a string such as
     \c blue can be passed or a QColor.
@@ -1052,20 +1074,10 @@ void QMapboxGL::setLayoutProperty(const QString& layer, const QString& property_
         map->setPaintProperty("route","line-dasharray", lineDashArray);
     \endcode
 */
-void QMapboxGL::setPaintProperty(const QString& layer, const QString& property_, const QVariant& value)
+
+bool QMapboxGL::setPaintProperty(const QString& layer, const QString& propertyName, const QVariant& value)
 {
-    using namespace mbgl::style;
-
-    Layer* layer_ = d_ptr->mapObj->getStyle().getLayer(layer.toStdString());
-    if (!layer_) {
-        qWarning() << "Layer not found:" << layer;
-        return;
-    }
-
-    if (conversion::setPaintProperty(*layer_, property_.toStdString(), value)) {
-        qWarning() << "Error setting paint property:" << layer << "-" << property_;
-        return;
-    }
+    return d_ptr->setProperty(&mbgl::style::Layer::setPaintProperty, layer, propertyName, value);
 }
 
 /*!
@@ -1094,7 +1106,7 @@ void QMapboxGL::moveBy(const QPointF &offset)
     can be used for implementing a pinch gesture.
 */
 void QMapboxGL::scaleBy(double scale_, const QPointF &center) {
-    d_ptr->mapObj->setZoom(d_ptr->mapObj->getZoom() + mbgl::util::log2(scale_), mbgl::ScreenCoordinate { center.x(), center.y() });
+    d_ptr->mapObj->setZoom(d_ptr->mapObj->getZoom() + ::log2(scale_), mbgl::ScreenCoordinate { center.x(), center.y() });
 }
 
 /*!
@@ -1356,20 +1368,43 @@ void QMapboxGL::removeSource(const QString& id)
     this API and is not officially supported. Use at your own risk.
 */
 void QMapboxGL::addCustomLayer(const QString &id,
-        QMapbox::CustomLayerInitializeFunction initFn,
-        QMapbox::CustomLayerRenderFunction renderFn,
-        QMapbox::CustomLayerDeinitializeFunction deinitFn,
-        void *context,
+        QScopedPointer<QMapbox::CustomLayerHostInterface>& host,
         const QString& before)
 {
+    class HostWrapper : public mbgl::style::CustomLayerHost {
+        public:
+        QScopedPointer<QMapbox::CustomLayerHostInterface> ptr;
+        HostWrapper(QScopedPointer<QMapbox::CustomLayerHostInterface>& p)
+         : ptr(p.take()) {
+         }
+
+        void initialize() {
+            ptr->initialize();
+        }
+
+        void render(const mbgl::style::CustomLayerRenderParameters& params) {
+            QMapbox::CustomLayerRenderParameters renderParams;
+            renderParams.width = params.width;
+            renderParams.height = params.height;
+            renderParams.latitude = params.latitude;
+            renderParams.longitude = params.longitude;
+            renderParams.zoom = params.zoom;
+            renderParams.bearing = params.bearing;
+            renderParams.pitch = params.pitch;
+            renderParams.fieldOfView = params.fieldOfView;
+            ptr->render(renderParams);
+        }
+
+        void contextLost() { }
+
+        void deinitialize() {
+            ptr->deinitialize();
+        }
+    };
+
     d_ptr->mapObj->getStyle().addLayer(std::make_unique<mbgl::style::CustomLayer>(
             id.toStdString(),
-            reinterpret_cast<mbgl::style::CustomLayerInitializeFunction>(initFn),
-            // This cast is safe as long as both mbgl:: and QMapbox::
-            // CustomLayerRenderParameters members remains the same.
-            (mbgl::style::CustomLayerRenderFunction)renderFn,
-            reinterpret_cast<mbgl::style::CustomLayerDeinitializeFunction>(deinitFn),
-            context),
+            std::make_unique<HostWrapper>(host)),
             before.isEmpty() ? mbgl::optional<std::string>() : mbgl::optional<std::string>(before.toStdString()));
 }
 
@@ -1426,6 +1461,23 @@ void QMapboxGL::removeLayer(const QString& id)
 }
 
 /*!
+    List of all existing layer ids from the current style.
+*/
+QList<QString> QMapboxGL::layerIds() const
+{
+    const auto &layers = d_ptr->mapObj->getStyle().getLayers();
+
+    QList<QString> layerIds;
+    layerIds.reserve(layers.size());
+
+    for (const mbgl::style::Layer *layer : layers) {
+        layerIds.append(QString::fromStdString(layer->getID()));
+    }
+
+    return layerIds;
+}
+
+/*!
     Adds the \a image with the identifier \a id that can be used
     later by a symbol layer.
 
@@ -1452,7 +1504,7 @@ void QMapboxGL::removeImage(const QString &id)
 
 /*!
     Adds a \a filter to a style \a layer using the format described in the \l
-    {https://www.mapbox.com/mapbox-gl-style-spec/#types-filter}{Mapbox style specification}.
+    {https://www.mapbox.com/mapbox-gl-js/style-spec/#other-filter}{Mapbox style specification}.
 
     Given a layer \c marker from an arbitrary GeoJSON source containing features of type \b
     "Point" and \b "LineString", this example shows how to make sure the layer will only tag
@@ -1460,14 +1512,14 @@ void QMapboxGL::removeImage(const QString &id)
 
     \code
         QVariantList filterExpression;
-        filterExpression.append("==");
-        filterExpression.append("$type");
-        filterExpression.append("Point");
+        filterExpression.push_back(QLatin1String("=="));
+        filterExpression.push_back(QLatin1String("$type"));
+        filterExpression.push_back(QLatin1String("Point"));
 
         QVariantList filter;
-        filter.append(filterExpression);
+        filter.push_back(filterExpression);
 
-        map->setFilter("marker", filter);
+        map->setFilter(QLatin1String("marker"), filter);
     \endcode
 */
 void QMapboxGL::setFilter(const QString& layer, const QVariant& filter)
@@ -1513,6 +1565,77 @@ void QMapboxGL::setFilter(const QString& layer, const QVariant& filter)
     }
 
     qWarning() << "Layer doesn't support filters";
+}
+
+QVariant QVariantFromValue(const mbgl::Value &value) {
+    return value.match(
+        [](const mbgl::NullValue) {
+            return QVariant();
+        }, [](const bool value_) {
+            return QVariant(value_);
+        }, [](const float value_) {
+            return QVariant(value_);
+        }, [](const int64_t value_) {
+            return QVariant(static_cast<qlonglong>(value_));
+        }, [](const double value_) {
+            return QVariant(value_);
+        }, [](const std::string &value_) {
+           return QVariant(value_.c_str());
+        }, [](const mbgl::Color &value_) {
+            return QColor(value_.r, value_.g, value_.b, value_.a);
+        }, [&](const std::vector<mbgl::Value> &vector) {
+            QVariantList list;
+            list.reserve(vector.size());
+            for (const auto &value_ : vector) {
+                list.push_back(QVariantFromValue(value_));
+            }
+            return list;
+        }, [&](const std::unordered_map<std::string, mbgl::Value> &map) {
+            QVariantMap varMap;
+            for (auto &item : map) {
+                varMap.insert(item.first.c_str(), QVariantFromValue(item.second));
+            }
+            return varMap;
+        }, [](const auto &) {
+            return QVariant();
+        });
+}
+
+/*!
+    Returns the current \a expression-based filter value applied to a style
+    \layer, if any.
+
+    Filter value types are described in the {https://www.mapbox.com/mapbox-gl-js/style-spec/#types}{Mapbox style specification}.
+*/
+QVariant QMapboxGL::getFilter(const QString &layer)  const {
+    using namespace mbgl::style;
+    using namespace mbgl::style::conversion;
+
+    Layer* layer_ = d_ptr->mapObj->getStyle().getLayer(layer.toStdString());
+    if (!layer_) {
+        qWarning() << "Layer not found:" << layer;
+        return QVariant();
+    }
+
+    Filter filter_;
+
+    if (layer_->is<FillLayer>()) {
+        filter_ = layer_->as<FillLayer>()->getFilter();
+    } else if (layer_->is<LineLayer>()) {
+        filter_ = layer_->as<LineLayer>()->getFilter();
+    } else if (layer_->is<SymbolLayer>()) {
+        filter_ = layer_->as<SymbolLayer>()->getFilter();
+    } else if (layer_->is<CircleLayer>()) {
+        filter_ = layer_->as<CircleLayer>()->getFilter();
+    } else if (layer_->is<FillExtrusionLayer>()) {
+        filter_ = layer_->as<FillExtrusionLayer>()->getFilter();
+    } else {
+        qWarning() << "Layer doesn't support filters";
+        return QVariant();
+    }
+
+    auto serialized = filter_.serialize();
+    return QVariantFromValue(serialized);
 }
 
 /*!
@@ -1778,4 +1901,39 @@ void QMapboxGLPrivate::requestRendering()
     if (!m_renderQueued.test_and_set()) {
         emit needsRendering();
     }
+}
+
+bool QMapboxGLPrivate::setProperty(const PropertySetter& setter, const QString& layer, const QString& name, const QVariant& value) {
+    using namespace mbgl::style;
+
+    Layer* layerObject = mapObj->getStyle().getLayer(layer.toStdString());
+    if (!layerObject) {
+        qWarning() << "Layer not found:" << layer;
+        return false;
+    }
+
+    const std::string& propertyString = name.toStdString();
+
+    mbgl::optional<conversion::Error> result;
+
+    if (value.type() == QVariant::String) {
+        mbgl::JSDocument document;
+        document.Parse<0>(value.toString().toStdString());
+        if (!document.HasParseError()) {
+            // Treat value as a valid JSON.
+            const mbgl::JSValue* jsonValue = &document;
+            result = (layerObject->*setter)(propertyString, jsonValue);
+        } else {
+            result = (layerObject->*setter)(propertyString, value);
+        }
+    } else {
+        result = (layerObject->*setter)(propertyString, value);
+    }
+
+    if (result) {
+        qWarning() << "Error setting property" << name << "on layer" << layer << ":" << QString::fromStdString(result->message);
+        return false;
+    }
+
+    return true;
 }

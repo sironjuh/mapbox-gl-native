@@ -4,10 +4,8 @@ import android.graphics.SurfaceTexture;
 import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.view.TextureView;
+import com.mapbox.mapboxsdk.log.Logger;
 import com.mapbox.mapboxsdk.maps.renderer.egl.EGLConfigChooser;
-
-import java.lang.ref.WeakReference;
-import java.util.ArrayList;
 
 import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGL11;
@@ -16,8 +14,8 @@ import javax.microedition.khronos.egl.EGLContext;
 import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
 import javax.microedition.khronos.opengles.GL10;
-
-import timber.log.Timber;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 
 /**
  * The render thread is responsible for managing the communication between the
@@ -25,6 +23,8 @@ import timber.log.Timber;
  * are managed from here.
  */
 class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextureListener {
+
+  private static final String TAG = "Mbgl-TextureViewRenderThread";
 
   private final TextureViewMapRenderer mapRenderer;
   private final EGLHolder eglHolder;
@@ -53,9 +53,10 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
    */
   @UiThread
   TextureViewRenderThread(@NonNull TextureView textureView, @NonNull TextureViewMapRenderer mapRenderer) {
+    textureView.setOpaque(!mapRenderer.isTranslucentSurface());
     textureView.setSurfaceTextureListener(this);
     this.mapRenderer = mapRenderer;
-    this.eglHolder = new EGLHolder(new WeakReference<>(textureView));
+    this.eglHolder = new EGLHolder(new WeakReference<>(textureView), mapRenderer.isTranslucentSurface());
   }
 
   // SurfaceTextureListener methods
@@ -285,7 +286,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
           case EGL10.EGL_SUCCESS:
             break;
           case EGL11.EGL_CONTEXT_LOST:
-            Timber.w("Context lost. Waiting for re-aquire");
+            Logger.w(TAG, "Context lost. Waiting for re-aquire");
             synchronized (lock) {
               surface = null;
               destroySurface = true;
@@ -293,7 +294,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
             }
             break;
           default:
-            Timber.w("eglSwapBuffer error: %s. Waiting or new surface", swapError);
+            Logger.w(TAG, String.format("eglSwapBuffer error: %s. Waiting or new surface", swapError));
             // Probably lost the surface. Clear the current one and
             // wait for a new one to be set
             synchronized (lock) {
@@ -324,6 +325,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
   private static class EGLHolder {
     private static final int EGL_CONTEXT_CLIENT_VERSION = 0x3098;
     private final WeakReference<TextureView> textureViewWeakRef;
+    private boolean translucentSurface;
 
     private EGL10 egl;
     private EGLConfig eglConfig;
@@ -331,8 +333,9 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
     private EGLContext eglContext = EGL10.EGL_NO_CONTEXT;
     private EGLSurface eglSurface = EGL10.EGL_NO_SURFACE;
 
-    EGLHolder(WeakReference<TextureView> textureViewWeakRef) {
+    EGLHolder(WeakReference<TextureView> textureViewWeakRef, boolean translucentSurface) {
       this.textureViewWeakRef = textureViewWeakRef;
+      this.translucentSurface = translucentSurface;
     }
 
     void prepare() {
@@ -357,7 +360,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
         eglConfig = null;
         eglContext = EGL10.EGL_NO_CONTEXT;
       } else if (eglContext == EGL10.EGL_NO_CONTEXT) {
-        eglConfig = new EGLConfigChooser().chooseConfig(egl, eglDisplay);
+        eglConfig = new EGLConfigChooser(translucentSurface).chooseConfig(egl, eglDisplay);
         int[] attrib_list = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL10.EGL_NONE};
         eglContext = egl.eglCreateContext(eglDisplay, eglConfig, EGL10.EGL_NO_CONTEXT, attrib_list);
       }
@@ -387,7 +390,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
       if (eglSurface == null || eglSurface == EGL10.EGL_NO_SURFACE) {
         int error = egl.eglGetError();
         if (error == EGL10.EGL_BAD_NATIVE_WINDOW) {
-          Timber.e("createWindowSurface returned EGL_BAD_NATIVE_WINDOW.");
+          Logger.e(TAG, "createWindowSurface returned EGL_BAD_NATIVE_WINDOW.");
         }
         return false;
       }
@@ -399,7 +402,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
       if (!egl.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
         // Could not make the context current, probably because the underlying
         // SurfaceView surface has been destroyed.
-        Timber.w("eglMakeCurrent: %s", egl.eglGetError());
+        Logger.w(TAG, String.format("eglMakeCurrent: %s", egl.eglGetError()));
         return false;
       }
 
@@ -419,7 +422,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
       }
 
       if (!egl.eglDestroySurface(eglDisplay, eglSurface)) {
-        Timber.w("Could not destroy egl surface. Display %s, Surface %s", eglDisplay, eglSurface);
+        Logger.w(TAG, String.format("Could not destroy egl surface. Display %s, Surface %s", eglDisplay, eglSurface));
       }
 
       eglSurface = EGL10.EGL_NO_SURFACE;
@@ -431,7 +434,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
       }
 
       if (!egl.eglDestroyContext(eglDisplay, eglContext)) {
-        Timber.w("Could not destroy egl context. Display %s, Context %s", eglDisplay, eglContext);
+        Logger.w(TAG, String.format("Could not destroy egl context. Display %s, Context %s", eglDisplay, eglContext));
       }
 
       eglContext = EGL10.EGL_NO_CONTEXT;
@@ -443,7 +446,7 @@ class TextureViewRenderThread extends Thread implements TextureView.SurfaceTextu
       }
 
       if (!egl.eglTerminate(eglDisplay)) {
-        Timber.w("Could not terminate egl. Display %s", eglDisplay);
+        Logger.w(TAG, String.format("Could not terminate egl. Display %s", eglDisplay));
       }
       eglDisplay = EGL10.EGL_NO_DISPLAY;
     }

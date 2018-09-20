@@ -7,7 +7,7 @@ import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
 import com.mapbox.mapboxsdk.testapp.activity.BaseActivityTest;
-import com.mapbox.mapboxsdk.testapp.activity.espresso.EspressoTestActivity;
+import com.mapbox.mapboxsdk.testapp.activity.espresso.DeviceIndependentTestActivity;
 import com.mapbox.mapboxsdk.testapp.utils.TestConstants;
 
 import org.junit.Ignore;
@@ -20,7 +20,7 @@ public class CameraAnimateTest extends BaseActivityTest {
 
   @Override
   protected Class getActivityClass() {
-    return EspressoTestActivity.class;
+    return DeviceIndependentTestActivity.class;
   }
 
   @Test

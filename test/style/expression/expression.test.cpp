@@ -1,6 +1,6 @@
 #include <mbgl/test/util.hpp>
 #include <mbgl/util/io.hpp>
-#include <mbgl/style/conversion.hpp>
+#include <mbgl/style/conversion_impl.hpp>
 #include <mbgl/util/rapidjson.hpp>
 #include <mbgl/style/rapidjson_conversion.hpp>
 #include <mbgl/style/expression/is_expression.hpp>
@@ -24,11 +24,19 @@ TEST(Expression, IsExpression) {
                 spec["expression_name"].IsObject() &&
                 spec["expression_name"].HasMember("values") &&
                 spec["expression_name"]["values"].IsObject());
-    
+
     const auto& allExpressions = spec["expression_name"]["values"];
-    
+
     for(auto& entry : allExpressions.GetObject()) {
         const std::string name { entry.name.GetString(), entry.name.GetStringLength() };
+        if (name == "line-progress" ||
+            name == "feature-state" ||
+            name == "interpolate-hcl" ||
+            name == "interpolate-lab" ||
+            name == "format") {
+            // Not yet implemented
+            continue;
+        }
         JSDocument document;
         document.Parse<0>(R"([")" + name + R"("])");
 
@@ -49,7 +57,7 @@ TEST_P(ExpressionEqualityTest, ExpressionEquality) {
         assert(!document.HasParseError());
         const JSValue* expression = &document;
         expression::ParsingContext ctx;
-        expression::ParseResult parsed = ctx.parse(conversion::Convertible(expression));
+        expression::ParseResult parsed = ctx.parseExpression(conversion::Convertible(expression));
         if (!parsed) {
             error_ = ctx.getErrors().size() > 0 ? ctx.getErrors()[0].message : "failed to parse";
         };

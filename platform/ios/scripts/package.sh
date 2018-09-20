@@ -8,6 +8,7 @@ NAME=Mapbox
 OUTPUT=build/ios/pkg
 DERIVED_DATA=build/ios
 PRODUCTS=${DERIVED_DATA}
+LOG_PATH=build/xcodebuild-$(date +"%Y-%m-%d_%H%M%S").log
 
 BUILDTYPE=${BUILDTYPE:-Debug}
 BUILD_FOR_DEVICE=${BUILD_DEVICE:-true}
@@ -70,13 +71,13 @@ xcodebuild \
     CURRENT_SHORT_VERSION=${SHORT_VERSION} \
     CURRENT_SEMANTIC_VERSION=${SEM_VERSION} \
     CURRENT_COMMIT_HASH=${HASH} \
-    ARCHS="x86_64" \
+    ONLY_ACTIVE_ARCH=NO \
     -derivedDataPath ${DERIVED_DATA} \
     -workspace ./platform/ios/ios.xcworkspace \
     -scheme ${SCHEME} \
     -configuration ${BUILDTYPE} \
     -sdk iphonesimulator \
-    -jobs ${JOBS} | xcpretty
+    -jobs ${JOBS} | tee ${LOG_PATH} | xcpretty
 
 if [[ ${BUILD_FOR_DEVICE} == true ]]; then
     step "Building for iOS devices using scheme ${SCHEME}"
@@ -91,7 +92,7 @@ if [[ ${BUILD_FOR_DEVICE} == true ]]; then
         -scheme ${SCHEME} \
         -configuration ${BUILDTYPE} \
         -sdk iphoneos \
-        -jobs ${JOBS} | xcpretty
+        -jobs ${JOBS} | tee ${LOG_PATH} | xcpretty
 fi
 
 LIBS=(Mapbox.a)
@@ -136,8 +137,8 @@ if [[ ${BUILD_FOR_DEVICE} == true ]]; then
             ${PRODUCTS}/${BUILDTYPE}-iphonesimulator/${NAME}.framework/${NAME} \
             -create -output ${OUTPUT}/dynamic/${NAME}.framework/${NAME} | echo
     fi
-
-    cp -rv ${PRODUCTS}/${BUILDTYPE}-iphoneos/Settings.bundle ${OUTPUT}
+    
+    cp -rv platform/ios/app/Settings.bundle ${OUTPUT}
 else
     if [[ ${BUILD_STATIC} == true ]]; then
         step "Assembling static library for iOS Simulator…"
@@ -161,8 +162,8 @@ else
                 ${OUTPUT}/dynamic/
         fi
     fi
-
-    cp -rv ${PRODUCTS}/${BUILDTYPE}-iphonesimulator/Settings.bundle ${OUTPUT}
+    
+    cp -rv platform/ios/app/Settings.bundle ${OUTPUT}
 fi
 
 if [[ ${SYMBOLS} = NO ]]; then
@@ -194,6 +195,10 @@ if [[ ${BUILD_DYNAMIC} == true && ${BUILDTYPE} == Release ]]; then
     validate_dsym \
         "${OUTPUT}/dynamic/${NAME}.framework.dSYM/Contents/Resources/DWARF/${NAME}" \
         "${OUTPUT}/dynamic/${NAME}.framework/${NAME}"
+
+        step "Removing i386 slice from dSYM"
+        lipo -remove i386 "${OUTPUT}/dynamic/${NAME}.framework.dSYM/Contents/Resources/DWARF/${NAME}" -o "${OUTPUT}/dynamic/${NAME}.framework.dSYM/Contents/Resources/DWARF/${NAME}"
+        lipo -info "${OUTPUT}/dynamic/${NAME}.framework.dSYM/Contents/Resources/DWARF/${NAME}"
 fi
 
 function create_podspec {
@@ -242,23 +247,6 @@ fi
 if [[ ${BUILD_DYNAMIC} == true && ${BUILD_FOR_DEVICE} == true ]]; then
     step "Copying bitcode symbol maps…"
     find "${PRODUCTS}/${BUILDTYPE}-iphoneos" -name '*.bcsymbolmap' -type f -exec cp -pv {} "${OUTPUT}/dynamic/" \;
-
-    step "Copying demo project and sym linking to published framework…"
-    cp -rv platform/ios/scripts/script_resources/MapboxDemo "${OUTPUT}"
-    cd "${OUTPUT}/MapboxDemo"
-    ln -sv "../dynamic/${NAME}.framework"
-    cd -
-
-    step "Building demo project…"
-    xcodebuild -quiet -project build/ios/pkg/MapboxDemo/MapboxDemo.xcodeproj -scheme MapboxDemo build ONLY_ACTIVE_ARCH=YES -destination 'platform=iOS Simulator,name=iPhone 7' clean build &> /tmp/iosdemobuildoutput || true
-    if grep -Fxq "** BUILD FAILED **" /tmp/iosdemobuildoutput
-    then
-        echo "Could not build demo project with this version of the SDK."
-        rm -rf "${OUTPUT}/MapboxDemo"
-    else
-        echo "Built and packaged demo project."
-    fi
-    rm /tmp/iosdemobuildoutput
 fi
 sed -n -e '/^## /,$p' platform/ios/CHANGELOG.md > "${OUTPUT}/CHANGELOG.md"
 

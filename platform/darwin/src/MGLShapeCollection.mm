@@ -1,16 +1,17 @@
 #import "MGLShapeCollection.h"
 
 #import "MGLShape_Private.h"
+#import "MGLFeature.h"
 
 #import <mbgl/style/conversion/geojson.hpp>
 
 @implementation MGLShapeCollection
 
-+ (instancetype)shapeCollectionWithShapes:(NS_ARRAY_OF(MGLShape *) *)shapes {
++ (instancetype)shapeCollectionWithShapes:(NSArray<MGLShape *> *)shapes {
     return [[self alloc] initWithShapes:shapes];
 }
 
-- (instancetype)initWithShapes:(NS_ARRAY_OF(MGLShape *) *)shapes {
+- (instancetype)initWithShapes:(NSArray<MGLShape *> *)shapes {
     if (self = [super init]) {
         _shapes = shapes.copy;
     }

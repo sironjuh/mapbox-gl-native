@@ -4,19 +4,18 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.PointF;
 import android.graphics.RectF;
-import android.location.Location;
 import android.os.Bundle;
 import android.support.annotation.FloatRange;
 import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.annotation.Size;
 import android.support.annotation.UiThread;
 import android.support.v4.util.Pools;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.gestures.AndroidGesturesManager;
 import com.mapbox.android.gestures.MoveGestureDetector;
 import com.mapbox.android.gestures.RotateGestureDetector;
@@ -24,6 +23,7 @@ import com.mapbox.android.gestures.ShoveGestureDetector;
 import com.mapbox.android.gestures.StandardScaleGestureDetector;
 import com.mapbox.geojson.Feature;
 import com.mapbox.geojson.Geometry;
+import com.mapbox.mapboxsdk.MapStrictMode;
 import com.mapbox.mapboxsdk.annotations.Annotation;
 import com.mapbox.mapboxsdk.annotations.BaseMarkerOptions;
 import com.mapbox.mapboxsdk.annotations.BaseMarkerViewOptions;
@@ -39,22 +39,18 @@ import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdate;
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.constants.MapboxConstants;
-import com.mapbox.mapboxsdk.constants.MyBearingTracking;
-import com.mapbox.mapboxsdk.constants.MyLocationTracking;
 import com.mapbox.mapboxsdk.constants.Style;
 import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
-import com.mapbox.mapboxsdk.maps.widgets.MyLocationViewSettings;
-import com.mapbox.mapboxsdk.style.layers.Filter;
+import com.mapbox.mapboxsdk.location.LocationComponent;
+import com.mapbox.mapboxsdk.log.Logger;
+import com.mapbox.mapboxsdk.style.expressions.Expression;
 import com.mapbox.mapboxsdk.style.layers.Layer;
 import com.mapbox.mapboxsdk.style.light.Light;
 import com.mapbox.mapboxsdk.style.sources.Source;
 
-import java.lang.reflect.ParameterizedType;
 import java.util.HashMap;
 import java.util.List;
-
-import timber.log.Timber;
 
 /**
  * The general class to interact with in the Android Mapbox SDK. It exposes the entry point for all
@@ -68,29 +64,27 @@ import timber.log.Timber;
 @UiThread
 public final class MapboxMap {
 
+  private static final String TAG = "Mbgl-MapboxMap";
+
   private final NativeMapView nativeMapView;
 
   private final UiSettings uiSettings;
-  private final TrackingSettings trackingSettings;
   private final Projection projection;
   private final Transform transform;
   private final AnnotationManager annotationManager;
-  private final MyLocationViewSettings myLocationViewSettings;
   private final CameraChangeDispatcher cameraChangeDispatcher;
 
   private final OnGesturesManagerInteractionListener onGesturesManagerInteractionListener;
 
+  private LocationComponent locationComponent;
   private MapboxMap.OnFpsChangedListener onFpsChangedListener;
-  private PointF focalPoint;
 
-  MapboxMap(NativeMapView map, Transform transform, UiSettings ui, TrackingSettings tracking,
-            MyLocationViewSettings myLocationView, Projection projection, OnGesturesManagerInteractionListener listener,
-            AnnotationManager annotations, CameraChangeDispatcher cameraChangeDispatcher) {
+  MapboxMap(NativeMapView map, Transform transform, UiSettings ui, Projection projection,
+            OnGesturesManagerInteractionListener listener, AnnotationManager annotations,
+            CameraChangeDispatcher cameraChangeDispatcher) {
     this.nativeMapView = map;
     this.uiSettings = ui;
-    this.trackingSettings = tracking;
     this.projection = projection;
-    this.myLocationViewSettings = myLocationView;
     this.annotationManager = annotations.bind(this);
     this.transform = transform;
     this.onGesturesManagerInteractionListener = listener;
@@ -100,13 +94,12 @@ public final class MapboxMap {
   void initialise(@NonNull Context context, @NonNull MapboxMapOptions options) {
     transform.initialise(this, options);
     uiSettings.initialise(context, options);
-    myLocationViewSettings.initialise(options);
-    trackingSettings.initialise(options);
 
     // Map configuration
     setDebugActive(options.getDebugActive());
     setApiBaseUrl(options);
     setStyleUrl(options);
+    setStyleJson(options);
     setPrefetchesTiles(options);
   }
 
@@ -115,18 +108,18 @@ public final class MapboxMap {
    */
   void onStart() {
     nativeMapView.update();
-    trackingSettings.onStart();
-    if (TextUtils.isEmpty(nativeMapView.getStyleUrl())) {
+    if (TextUtils.isEmpty(nativeMapView.getStyleUrl()) && TextUtils.isEmpty(nativeMapView.getStyleJson())) {
       // if user hasn't loaded a Style yet
       nativeMapView.setStyleUrl(Style.MAPBOX_STREETS);
     }
+    locationComponent.onStart();
   }
 
   /**
    * Called when the hosting Activity/Fragment onStop() method is called.
    */
   void onStop() {
-    trackingSettings.onStop();
+    locationComponent.onStop();
   }
 
   /**
@@ -134,13 +127,11 @@ public final class MapboxMap {
    *
    * @param outState the bundle to save the state to.
    */
-  void onSaveInstanceState(Bundle outState) {
+  void onSaveInstanceState(@NonNull Bundle outState) {
     outState.putParcelable(MapboxConstants.STATE_CAMERA_POSITION, transform.getCameraPosition());
     outState.putBoolean(MapboxConstants.STATE_DEBUG_ACTIVE, nativeMapView.getDebug());
     outState.putString(MapboxConstants.STATE_STYLE_URL, nativeMapView.getStyleUrl());
-    trackingSettings.onSaveInstanceState(outState);
     uiSettings.onSaveInstanceState(outState);
-    myLocationViewSettings.onSaveInstanceState(outState);
   }
 
   /**
@@ -148,12 +139,10 @@ public final class MapboxMap {
    *
    * @param savedInstanceState the bundle containing the saved state
    */
-  void onRestoreInstanceState(Bundle savedInstanceState) {
+  void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
     final CameraPosition cameraPosition = savedInstanceState.getParcelable(MapboxConstants.STATE_CAMERA_POSITION);
 
-    myLocationViewSettings.onRestoreInstanceState(savedInstanceState);
     uiSettings.onRestoreInstanceState(savedInstanceState);
-    trackingSettings.onRestoreInstanceState(savedInstanceState);
 
     if (cameraPosition != null) {
       moveCamera(CameraUpdateFactory.newCameraPosition(
@@ -170,9 +159,17 @@ public final class MapboxMap {
   }
 
   /**
+   * Called when the hosting Activity/Fragment onDestroy()/onDestroyView() method is called.
+   */
+  void onDestroy() {
+    locationComponent.onDestroy();
+  }
+
+  /**
    * Called before the OnMapReadyCallback is invoked.
    */
   void onPreMapReady() {
+    invalidateCameraPosition();
     annotationManager.reloadMarkers();
     annotationManager.adjustTopOffsetPixels(this);
   }
@@ -189,10 +186,23 @@ public final class MapboxMap {
   }
 
   /**
+   * Called when the map will start loading style.
+   */
+  void onStartLoadingMap() {
+    locationComponent.onStartLoadingMap();
+  }
+
+  /**
+   * Called the map finished loading style.
+   */
+  void onFinishLoadingStyle() {
+    locationComponent.onFinishLoadingStyle();
+  }
+
+  /**
    * Called when the region is changing or has changed.
    */
   void onUpdateRegionChange() {
-    trackingSettings.update();
     annotationManager.update();
   }
 
@@ -284,6 +294,7 @@ public final class MapboxMap {
    *
    * @return all the layers in the current style
    */
+  @NonNull
   public List<Layer> getLayers() {
     return nativeMapView.getLayers();
   }
@@ -312,7 +323,9 @@ public final class MapboxMap {
       // noinspection unchecked
       return (T) nativeMapView.getLayer(layerId);
     } catch (ClassCastException exception) {
-      Timber.e(exception, "Layer: %s is a different type: ", layerId);
+      String message = String.format("Layer: %s is a different type: ", layerId);
+      Logger.e(TAG, message, exception);
+      MapStrictMode.strictModeViolation(message, exception);
       return null;
     }
   }
@@ -395,6 +408,7 @@ public final class MapboxMap {
    *
    * @return all the sources in the current style
    */
+  @NonNull
   public List<Source> getSources() {
     return nativeMapView.getSources();
   }
@@ -423,7 +437,9 @@ public final class MapboxMap {
       // noinspection unchecked
       return (T) nativeMapView.getSource(sourceId);
     } catch (ClassCastException exception) {
-      Timber.e(exception, "Source: %s is a different type: ", sourceId);
+      String message = String.format("Source: %s is a different type: ", sourceId);
+      Logger.e(TAG, message, exception);
+      MapStrictMode.strictModeViolation(message, exception);
       return null;
     }
   }
@@ -449,7 +465,7 @@ public final class MapboxMap {
   }
 
   /**
-   * Removes the source, preserving the reverence for re-use
+   * Removes the source, preserving the reference for re-use
    *
    * @param source the source to remove
    * @return the source
@@ -466,7 +482,18 @@ public final class MapboxMap {
    * @param image the pre-multiplied Bitmap
    */
   public void addImage(@NonNull String name, @NonNull Bitmap image) {
-    nativeMapView.addImage(name, image);
+    addImage(name, image, false);
+  }
+
+  /**
+   * Adds an image to be used in the map's style
+   *
+   * @param name  the name of the image
+   * @param image the pre-multiplied Bitmap
+   * @param sdf   the flag indicating image is an SDF or template image
+   */
+  public void addImage(@NonNull String name, @NonNull Bitmap image, boolean sdf) {
+    nativeMapView.addImage(name, image, sdf);
   }
 
   /**
@@ -481,10 +508,11 @@ public final class MapboxMap {
    *
    * @param name the name of the image to remove
    */
-  public void removeImage(String name) {
+  public void removeImage(@NonNull String name) {
     nativeMapView.removeImage(name);
   }
 
+  @Nullable
   public Bitmap getImage(@NonNull String name) {
     return nativeMapView.getImage(name);
   }
@@ -555,40 +583,9 @@ public final class MapboxMap {
    *
    * @return the UiSettings associated with this map
    */
+  @NonNull
   public UiSettings getUiSettings() {
     return uiSettings;
-  }
-
-  //
-  // TrackingSettings
-  //
-
-  /**
-   * Gets the tracking interface settings for the map.
-   *
-   * @return the TrackingSettings asssociated with this map
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public TrackingSettings getTrackingSettings() {
-    return trackingSettings;
-  }
-
-  //
-  // MyLocationViewSettings
-  //
-
-  /**
-   * Gets the settings of the user location for the map.
-   *
-   * @return the MyLocationViewSettings associated with this map
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public MyLocationViewSettings getMyLocationViewSettings() {
-    return myLocationViewSettings;
   }
 
   //
@@ -601,12 +598,13 @@ public final class MapboxMap {
    *
    * @return the Projection associated with this map
    */
+  @NonNull
   public Projection getProjection() {
     return projection;
   }
 
   //
-  //
+  // Light
   //
 
   /**
@@ -614,7 +612,7 @@ public final class MapboxMap {
    *
    * @return the global light source
    */
-  @Nullable
+  @NonNull
   public Light getLight() {
     return nativeMapView.getLight();
   }
@@ -622,47 +620,6 @@ public final class MapboxMap {
   //
   // Camera API
   //
-
-  /**
-   * Moves the center of the screen to a latitude and longitude specified by a LatLng object. This centers the
-   * camera on the LatLng object.
-   *
-   * @param latLng Target location to change to
-   */
-  public void setLatLng(@NonNull LatLng latLng) {
-    nativeMapView.setLatLng(latLng);
-  }
-
-  /**
-   * Moves the camera viewpoint to a particular zoom level.
-   *
-   * @param zoom Zoom level to change to
-   */
-  public void setZoom(@FloatRange(from = MapboxConstants.MINIMUM_ZOOM, to = MapboxConstants.MAXIMUM_ZOOM) double zoom) {
-    if (focalPoint == null) {
-      focalPoint = new PointF(nativeMapView.getWidth() / 2, nativeMapView.getHeight() / 2);
-    }
-    nativeMapView.setZoom(zoom, focalPoint, 0);
-  }
-
-  /**
-   * Moves the camera viewpoint angle to a particular angle in degrees.
-   *
-   * @param tilt Tilt angle to change to
-   */
-  public void setTilt(@FloatRange(from = MapboxConstants.MINIMUM_TILT, to = MapboxConstants.MAXIMUM_TILT) double tilt) {
-    nativeMapView.setPitch(tilt, 0);
-  }
-
-  /**
-   * Moves the camera viewpoint direction to a particular angle in degrees.
-   *
-   * @param bearing Direction angle to change to
-   */
-  public void setBearing(@FloatRange(from = MapboxConstants.MINIMUM_DIRECTION, to = MapboxConstants.MAXIMUM_DIRECTION)
-                           double bearing) {
-    nativeMapView.setBearing(bearing);
-  }
 
   /**
    * Cancels ongoing animations.
@@ -681,6 +638,7 @@ public final class MapboxMap {
    *
    * @return The current position of the Camera.
    */
+  @NonNull
   public final CameraPosition getCameraPosition() {
     return transform.getCameraPosition();
   }
@@ -703,7 +661,7 @@ public final class MapboxMap {
    *
    * @param update The change that should be applied to the camera.
    */
-  public final void moveCamera(CameraUpdate update) {
+  public final void moveCamera(@NonNull CameraUpdate update) {
     moveCamera(update, null);
   }
 
@@ -715,7 +673,8 @@ public final class MapboxMap {
    * @param update   The change that should be applied to the camera
    * @param callback the callback to be invoked when an animation finishes or is canceled
    */
-  public final void moveCamera(final CameraUpdate update, final MapboxMap.CancelableCallback callback) {
+  public final void moveCamera(@NonNull final CameraUpdate update,
+                               @Nullable final MapboxMap.CancelableCallback callback) {
     transform.moveCamera(MapboxMap.this, update, callback);
   }
 
@@ -741,7 +700,7 @@ public final class MapboxMap {
    *                   positive, otherwise an IllegalArgumentException will be thrown.
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void easeCamera(CameraUpdate update, int durationMs) {
+  public final void easeCamera(@NonNull CameraUpdate update, int durationMs) {
     easeCamera(update, durationMs, null);
   }
 
@@ -764,7 +723,8 @@ public final class MapboxMap {
    *                   Do not update or ease the camera from within onCancel().
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void easeCamera(CameraUpdate update, int durationMs, final MapboxMap.CancelableCallback callback) {
+  public final void easeCamera(@NonNull CameraUpdate update, int durationMs,
+                               @Nullable final MapboxMap.CancelableCallback callback) {
     easeCamera(update, durationMs, true, callback);
   }
 
@@ -782,7 +742,7 @@ public final class MapboxMap {
    *                           positive, otherwise an IllegalArgumentException will be thrown.
    * @param easingInterpolator True for easing interpolator, false for linear.
    */
-  public final void easeCamera(CameraUpdate update, int durationMs, boolean easingInterpolator) {
+  public final void easeCamera(@NonNull CameraUpdate update, int durationMs, boolean easingInterpolator) {
     easeCamera(update, durationMs, easingInterpolator, null);
   }
 
@@ -791,11 +751,6 @@ public final class MapboxMap {
    * unless specified within {@link CameraUpdate}. A callback can be used to be notified when
    * easing the camera stops. If {@link #getCameraPosition()} is called during the animation, it
    * will return the current location of the camera in flight.
-   * <p>
-   * Note that this will cancel location tracking mode if enabled. You can change this behaviour by calling
-   * {@link com.mapbox.mapboxsdk.maps.TrackingSettings#setDismissLocationTrackingOnGesture(boolean)} with false before
-   * invoking this method and calling it with true in the {@link CancelableCallback#onFinish()}.
-   * </p>
    *
    * @param update             The change that should be applied to the camera.
    * @param durationMs         The duration of the animation in milliseconds. This must be strictly
@@ -807,8 +762,10 @@ public final class MapboxMap {
    *                           by a later camera movement or a user gesture, onCancel() will be called.
    *                           Do not update or ease the camera from within onCancel().
    */
-  public final void easeCamera(final CameraUpdate update, final int durationMs, final boolean easingInterpolator,
-                               final MapboxMap.CancelableCallback callback) {
+  public final void easeCamera(@NonNull final CameraUpdate update,
+                               final int durationMs,
+                               final boolean easingInterpolator,
+                               @Nullable final MapboxMap.CancelableCallback callback) {
     easeCamera(update, durationMs, easingInterpolator, callback, false);
   }
 
@@ -817,11 +774,6 @@ public final class MapboxMap {
    * unless specified within {@link CameraUpdate}. A callback can be used to be notified when
    * easing the camera stops. If {@link #getCameraPosition()} is called during the animation, it
    * will return the current location of the camera in flight.
-   * <p>
-   * Note that this will cancel location tracking mode if enabled. You can change this behaviour by calling
-   * {@link com.mapbox.mapboxsdk.maps.TrackingSettings#setDismissLocationTrackingOnGesture(boolean)} with false before
-   * invoking this method and calling it with true in the {@link CancelableCallback#onFinish()}.
-   * </p>
    *
    * @param update             The change that should be applied to the camera.
    * @param durationMs         The duration of the animation in milliseconds. This must be strictly
@@ -834,8 +786,9 @@ public final class MapboxMap {
    *                           Do not update or ease the camera from within onCancel().
    * @param isDismissable      true will allow animated camera changes dismiss a tracking mode.
    */
-  public final void easeCamera(final CameraUpdate update, final int durationMs, final boolean easingInterpolator,
-                               final MapboxMap.CancelableCallback callback, final boolean isDismissable) {
+  public final void easeCamera(@NonNull final CameraUpdate update, final int durationMs,
+                               final boolean easingInterpolator, @Nullable final MapboxMap.CancelableCallback callback,
+                               final boolean isDismissable) {
 
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Null duration passed into easeCamera");
@@ -852,7 +805,7 @@ public final class MapboxMap {
    * @param update The change that should be applied to the camera.
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void animateCamera(CameraUpdate update) {
+  public final void animateCamera(@NonNull CameraUpdate update) {
     animateCamera(update, MapboxConstants.ANIMATION_DURATION, null);
   }
 
@@ -868,7 +821,7 @@ public final class MapboxMap {
    *                 called. Do not update or animate the camera from within onCancel().
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void animateCamera(CameraUpdate update, MapboxMap.CancelableCallback callback) {
+  public final void animateCamera(@NonNull CameraUpdate update, @Nullable MapboxMap.CancelableCallback callback) {
     animateCamera(update, MapboxConstants.ANIMATION_DURATION, callback);
   }
 
@@ -883,7 +836,7 @@ public final class MapboxMap {
    *                   positive, otherwise an IllegalArgumentException will be thrown.
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void animateCamera(CameraUpdate update, int durationMs) {
+  public final void animateCamera(@NonNull CameraUpdate update, int durationMs) {
     animateCamera(update, durationMs, null);
   }
 
@@ -905,10 +858,10 @@ public final class MapboxMap {
    *                   isn't required, leave it as null.
    * @see com.mapbox.mapboxsdk.camera.CameraUpdateFactory for a set of updates.
    */
-  public final void animateCamera(final CameraUpdate update, final int durationMs,
-                                  final MapboxMap.CancelableCallback callback) {
+  public final void animateCamera(@NonNull final CameraUpdate update, final int durationMs,
+                                  @Nullable final MapboxMap.CancelableCallback callback) {
     if (durationMs <= 0) {
-      throw new IllegalArgumentException("Null duration passed into animageCamera");
+      throw new IllegalArgumentException("Null duration passed into animateCamera");
     }
 
     transform.animateCamera(MapboxMap.this, update, durationMs, callback);
@@ -917,7 +870,7 @@ public final class MapboxMap {
   /**
    * Invalidates the current camera position by reconstructing it from mbgl
    */
-  void invalidateCameraPosition() {
+  private void invalidateCameraPosition() {
     CameraPosition cameraPosition = transform.invalidateCameraPosition();
     if (cameraPosition != null) {
       transform.updateCameraPosition(cameraPosition);
@@ -1137,7 +1090,7 @@ public final class MapboxMap {
    * @param options the object containing the style url
    */
   private void setStyleUrl(@NonNull MapboxMapOptions options) {
-    String style = options.getStyle();
+    String style = options.getStyleUrl();
     if (!TextUtils.isEmpty(style)) {
       setStyleUrl(style, null);
     }
@@ -1166,10 +1119,23 @@ public final class MapboxMap {
   }
 
   /**
+   * Loads a new map style json from MapboxMapOptions if available.
+   *
+   * @param options the object containing the style json
+   */
+  private void setStyleJson(@NonNull MapboxMapOptions options) {
+    String styleJson = options.getStyleJson();
+    if (!TextUtils.isEmpty(styleJson)) {
+      setStyleJson(styleJson);
+    }
+  }
+
+  /**
    * Returns the map style json currently displayed in the map view.
    *
    * @return The json of the map style
    */
+  @NonNull
   public String getStyleJson() {
     return nativeMapView.getStyleJson();
   }
@@ -1218,7 +1184,9 @@ public final class MapboxMap {
    * @param markerOptions A marker options object that defines how to render the marker
    * @return The {@code Marker} that was added to the map
    * @deprecated Use a {@link com.mapbox.mapboxsdk.style.layers.SymbolLayer} instead. An example of converting Android
-   * SDK views to be used as a symbol see https://github.com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android/MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
+   * SDK views to be used as a symbol see https://github
+   * .com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android
+   * /MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
    */
   @NonNull
   @Deprecated
@@ -1237,7 +1205,9 @@ public final class MapboxMap {
    * @param onMarkerViewAddedListener Callback invoked when the View has been added to the map
    * @return The {@code Marker} that was added to the map
    * @deprecated Use a {@link com.mapbox.mapboxsdk.style.layers.SymbolLayer} instead. An example of converting Android
-   * SDK views to be used as a symbol see https://github.com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android/MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
+   * SDK views to be used as a symbol see https://github
+   * .com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android
+   * /MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
    */
   @Deprecated
   @NonNull
@@ -1256,7 +1226,9 @@ public final class MapboxMap {
    * @param markerViewOptions A list of markerView options objects that defines how to render the markers
    * @return A list of the {@code MarkerView}s that were added to the map
    * @deprecated Use a {@link com.mapbox.mapboxsdk.style.layers.SymbolLayer} instead. An example of converting Android
-   * SDK views to be used as a symbol see https://github.com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android/MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
+   * SDK views to be used as a symbol see https://github
+   * .com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android
+   * /MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
    */
   @NonNull
   @Deprecated
@@ -1271,7 +1243,9 @@ public final class MapboxMap {
    * @param rect the rectangular area on the map to query for markerViews
    * @return A list of the markerViews that were found in the rectangle
    * @deprecated Use a {@link com.mapbox.mapboxsdk.style.layers.SymbolLayer} instead. An example of converting Android
-   * SDK views to be used as a symbol see https://github.com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android/MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
+   * SDK views to be used as a symbol see https://github
+   * .com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android
+   * /MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
    */
   @NonNull
   @Deprecated
@@ -1333,7 +1307,7 @@ public final class MapboxMap {
    *
    * @param polyline An updated polyline object.
    */
-  public void updatePolyline(Polyline polyline) {
+  public void updatePolyline(@NonNull Polyline polyline) {
     annotationManager.updatePolyline(polyline);
   }
 
@@ -1364,7 +1338,7 @@ public final class MapboxMap {
    *
    * @param polygon An updated polygon object
    */
-  public void updatePolygon(Polygon polygon) {
+  public void updatePolygon(@NonNull Polygon polygon) {
     annotationManager.updatePolygon(polygon);
   }
 
@@ -1542,7 +1516,7 @@ public final class MapboxMap {
    */
   public void selectMarker(@NonNull Marker marker) {
     if (marker == null) {
-      Timber.w("marker was null, so just returning");
+      Logger.w(TAG, "marker was null, so just returning");
       return;
     }
     annotationManager.selectMarker(marker);
@@ -1569,6 +1543,7 @@ public final class MapboxMap {
    *
    * @return The currently selected marker.
    */
+  @NonNull
   public List<Marker> getSelectedMarkers() {
     return annotationManager.getSelectedMarkers();
   }
@@ -1578,6 +1553,7 @@ public final class MapboxMap {
    *
    * @return the associated MarkerViewManager
    */
+  @NonNull
   public MarkerViewManager getMarkerViewManager() {
     return annotationManager.getMarkerViewManager();
   }
@@ -1644,51 +1620,147 @@ public final class MapboxMap {
     nativeMapView.setLatLngBounds(latLngBounds);
   }
 
+
   /**
-   * Get a camera position that fits a provided bounds and padding.
+   * Get a camera position that fits a provided bounds and the current camera tilt and bearing.
    *
-   * @param latLngBounds the bounds to constrain the map with
+   * @param latLngBounds the bounds to set the map with
+   * @return the camera position that fits the bounds
+   */
+  @NonNull
+  public CameraPosition getCameraForLatLngBounds(@NonNull LatLngBounds latLngBounds) {
+    // we use current camera tilt value to provide expected transformations as #11993
+    return getCameraForLatLngBounds(latLngBounds, new int[] {0, 0, 0, 0});
+  }
+
+
+  /**
+   * Get a camera position that fits a provided bounds and padding and the current camera tilt and bearing.
+   *
+   * @param latLngBounds the bounds to set the map with
    * @param padding      the padding to apply to the bounds
    * @return the camera position that fits the bounds and padding
    */
-  public CameraPosition getCameraForLatLngBounds(@Nullable LatLngBounds latLngBounds, int[] padding) {
-    // calculate and set additional bounds padding
-    int[] mapPadding = getPadding();
-    for (int i = 0; i < padding.length; i++) {
-      padding[i] = mapPadding[i] + padding[i];
-    }
-    projection.setContentPadding(padding, myLocationViewSettings.getPadding());
+  @NonNull
+  public CameraPosition getCameraForLatLngBounds(@NonNull LatLngBounds latLngBounds,
+                                                 @NonNull @Size(value = 4) int[] padding) {
+    // we use current camera tilt/bearing value to provide expected transformations as #11993
+    return getCameraForLatLngBounds(latLngBounds, padding, transform.getRawBearing(), transform.getTilt());
+  }
 
-    // get padded camera position from LatLngBounds
-    CameraPosition cameraPosition = nativeMapView.getCameraForLatLngBounds(latLngBounds);
 
-    // reset map padding
-    setPadding(mapPadding);
-    return cameraPosition;
+  /**
+   * Get a camera position that fits a provided bounds, bearing and tilt.
+   *
+   * @param latLngBounds the bounds to set the map with
+   * @param bearing      the bearing to transform the camera position with
+   * @param tilt         to transform the camera position with
+   * @return the camera position that fits the bounds and given bearing and tilt
+   */
+  @NonNull
+  public CameraPosition getCameraForLatLngBounds(@NonNull LatLngBounds latLngBounds,
+                                                 @FloatRange(from = MapboxConstants.MINIMUM_DIRECTION,
+                                                   to = MapboxConstants.MAXIMUM_DIRECTION) double bearing,
+                                                 @FloatRange(from = MapboxConstants.MINIMUM_TILT,
+                                                   to = MapboxConstants.MAXIMUM_TILT) double tilt) {
+    return getCameraForLatLngBounds(latLngBounds, new int[] {0, 0, 0, 0}, bearing, tilt);
+  }
+
+
+  /**
+   * Get a camera position that fits a provided bounds, padding, bearing and tilt.
+   *
+   * @param latLngBounds the bounds to set the map with
+   * @param padding      the padding to apply to the bounds
+   * @param bearing      the bearing to transform the camera position with
+   * @param tilt         to transform the camera position with
+   * @return the camera position that fits the bounds, bearing and tilt
+   */
+  @NonNull
+  public CameraPosition getCameraForLatLngBounds(@NonNull LatLngBounds latLngBounds,
+                                                 @NonNull @Size(value = 4) int[] padding,
+                                                 @FloatRange(from = MapboxConstants.MINIMUM_DIRECTION,
+                                                   to = MapboxConstants.MAXIMUM_DIRECTION) double bearing,
+                                                 @FloatRange(from = MapboxConstants.MINIMUM_TILT,
+                                                   to = MapboxConstants.MAXIMUM_TILT) double tilt) {
+    return nativeMapView.getCameraForLatLngBounds(latLngBounds, padding, bearing, tilt);
+  }
+
+  /**
+   * Get a camera position that fits a provided shape.
+   *
+   * @param geometry the geometry to wraps the map with
+   * @return the camera position that fits the geometry inside
+   */
+  @NonNull
+  public CameraPosition getCameraForGeometry(@NonNull Geometry geometry) {
+    // we use current camera tilt value to provide expected transformations as #11993
+    return getCameraForGeometry(geometry, new int[] {0, 0, 0, 0});
+  }
+
+  /**
+   * Get a camera position that fits a provided shape and padding.
+   *
+   * @param geometry the geometry to wraps the map with
+   * @param padding  the padding to apply to the bounds
+   * @return the camera position that fits the geometry inside and padding
+   */
+  @NonNull
+  public CameraPosition getCameraForGeometry(@NonNull Geometry geometry,
+                                             @NonNull @Size(value = 4) int[] padding) {
+    // we use current camera tilt/bearing value to provide expected transformations as #11993
+    return getCameraForGeometry(geometry, padding, transform.getBearing(), transform.getTilt());
+  }
+
+  /**
+   * Get a camera position that fits a provided shape with a given bearing and tilt.
+   *
+   * @param geometry the geometry to wraps the map with
+   * @param bearing  the bearing at which to compute the geometry's bounds
+   * @param tilt     the tilt at which to compute the geometry's bounds
+   * @return the camera position that the geometry inside with bearing and tilt
+   */
+  @NonNull
+  public CameraPosition getCameraForGeometry(@NonNull Geometry geometry,
+                                             @FloatRange(from = MapboxConstants.MINIMUM_DIRECTION,
+                                               to = MapboxConstants.MAXIMUM_DIRECTION) double bearing,
+                                             @FloatRange(from = MapboxConstants.MINIMUM_TILT,
+                                               to = MapboxConstants.MAXIMUM_TILT) double tilt) {
+    return getCameraForGeometry(geometry, new int[] {0, 0, 0, 0}, bearing, tilt);
+  }
+
+  /**
+   * Get a camera position that fits a provided shape with a given padding, bearing and tilt.
+   *
+   * @param geometry the geometry to wraps the map with
+   * @param padding  the padding to apply to the bounds
+   * @param bearing  the bearing at which to compute the geometry's bounds
+   * @param tilt     the tilt at which to compute the geometry's bounds
+   * @return the camera position that fits the geometry inside with padding, bearing and tilt
+   */
+  @NonNull
+  public CameraPosition getCameraForGeometry(@NonNull Geometry geometry,
+                                             @NonNull @Size(value = 4) int[] padding,
+                                             @FloatRange(from = MapboxConstants.MINIMUM_DIRECTION,
+                                               to = MapboxConstants.MAXIMUM_DIRECTION) double bearing,
+                                             @FloatRange(from = MapboxConstants.MINIMUM_TILT,
+                                               to = MapboxConstants.MAXIMUM_TILT) double tilt) {
+    return nativeMapView.getCameraForGeometry(geometry, padding, bearing, tilt);
   }
 
   /**
    * Get a camera position that fits a provided shape with a given bearing and padding.
    *
-   * @param geometry the geometry to constrain the map with
+   * @param geometry the geometry to wraps the map with
    * @param bearing  the bearing at which to compute the geometry's bounds
    * @param padding  the padding to apply to the bounds
-   * @return the camera position that fits the bounds and padding
+   * @return the camera position that fits the geometry inside with padding and bearing
+   * @deprecated use Mapbox{@link #getCameraForGeometry(Geometry, int[], double, double)} instead
    */
+  @NonNull
+  @Deprecated
   public CameraPosition getCameraForGeometry(Geometry geometry, double bearing, int[] padding) {
-    // calculate and set additional bounds padding
-    int[] mapPadding = getPadding();
-    for (int i = 0; i < padding.length; i++) {
-      padding[i] = mapPadding[i] + padding[i];
-    }
-    projection.setContentPadding(padding, myLocationViewSettings.getPadding());
-
-    // get padded camera position from LatLngBounds
-    CameraPosition cameraPosition = nativeMapView.getCameraForGeometry(geometry, bearing);
-
-    // reset map padding
-    setPadding(mapPadding);
-    return cameraPosition;
+    return getCameraForGeometry(geometry, padding, bearing, transform.getTilt());
   }
 
   //
@@ -1697,13 +1769,13 @@ public final class MapboxMap {
 
   /**
    * <p>
-   * Sets the distance from the edges of the map view’s frame to the edges of the map
-   * view’s logical viewport.
+   * Sets the distance from the edges of the map view&#x27;s frame to the edges of the map
+   * view&#x27s logical viewport.
    * </p>
    * <p>
    * When the value of this property is equal to {0,0,0,0}, viewport
-   * properties such as `centerCoordinate` assume a viewport that matches the map
-   * view’s frame. Otherwise, those properties are inset, excluding part of the
+   * properties such as &#x27;centerCoordinate&#x27; assume a viewport that matches the map
+   * view&#x27;s frame. Otherwise, those properties are inset, excluding part of the
    * frame from the viewport. For instance, if the only the top edge is inset, the
    * map center is effectively shifted downward.
    * </p>
@@ -1714,11 +1786,7 @@ public final class MapboxMap {
    * @param bottom The bottom margin in pixels.
    */
   public void setPadding(int left, int top, int right, int bottom) {
-    setPadding(new int[] {left, top, right, bottom});
-  }
-
-  private void setPadding(int[] padding) {
-    projection.setContentPadding(padding, myLocationViewSettings.getPadding());
+    projection.setContentPadding(new int[] {left, top, right, bottom});
     uiSettings.invalidate();
   }
 
@@ -1727,6 +1795,7 @@ public final class MapboxMap {
    *
    * @return An array with length 4 in the LTRB order.
    */
+  @NonNull
   public int[] getPadding() {
     return projection.getContentPadding();
   }
@@ -1763,7 +1832,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to notify
    */
-  public void addOnCameraIdleListener(@Nullable OnCameraIdleListener listener) {
+  public void addOnCameraIdleListener(@NonNull OnCameraIdleListener listener) {
     cameraChangeDispatcher.addOnCameraIdleListener(listener);
   }
 
@@ -1772,7 +1841,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to remove
    */
-  public void removeOnCameraIdleListener(@Nullable OnCameraIdleListener listener) {
+  public void removeOnCameraIdleListener(@NonNull OnCameraIdleListener listener) {
     cameraChangeDispatcher.removeOnCameraIdleListener(listener);
   }
 
@@ -1793,7 +1862,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to notify
    */
-  public void addOnCameraMoveCancelListener(@Nullable OnCameraMoveCanceledListener listener) {
+  public void addOnCameraMoveCancelListener(@NonNull OnCameraMoveCanceledListener listener) {
     cameraChangeDispatcher.addOnCameraMoveCancelListener(listener);
   }
 
@@ -1802,7 +1871,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to remove
    */
-  public void removeOnCameraMoveCancelListener(@Nullable OnCameraMoveCanceledListener listener) {
+  public void removeOnCameraMoveCancelListener(@NonNull OnCameraMoveCanceledListener listener) {
     cameraChangeDispatcher.removeOnCameraMoveCancelListener(listener);
   }
 
@@ -1823,7 +1892,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to notify
    */
-  public void addOnCameraMoveStartedListener(@Nullable OnCameraMoveStartedListener listener) {
+  public void addOnCameraMoveStartedListener(@NonNull OnCameraMoveStartedListener listener) {
     cameraChangeDispatcher.addOnCameraMoveStartedListener(listener);
   }
 
@@ -1832,7 +1901,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to remove
    */
-  public void removeOnCameraMoveStartedListener(@Nullable OnCameraMoveStartedListener listener) {
+  public void removeOnCameraMoveStartedListener(@NonNull OnCameraMoveStartedListener listener) {
     cameraChangeDispatcher.removeOnCameraMoveStartedListener(listener);
   }
 
@@ -1853,7 +1922,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to notify
    */
-  public void addOnCameraMoveListener(@Nullable OnCameraMoveListener listener) {
+  public void addOnCameraMoveListener(@NonNull OnCameraMoveListener listener) {
     cameraChangeDispatcher.addOnCameraMoveListener(listener);
   }
 
@@ -1862,7 +1931,7 @@ public final class MapboxMap {
    *
    * @param listener the listener to remove
    */
-  public void removeOnCameraMoveListener(@Nullable OnCameraMoveListener listener) {
+  public void removeOnCameraMoveListener(@NonNull OnCameraMoveListener listener) {
     cameraChangeDispatcher.removeOnCameraMoveListener(listener);
   }
 
@@ -1878,6 +1947,7 @@ public final class MapboxMap {
   }
 
   // used by MapView
+  @Nullable
   OnFpsChangedListener getOnFpsChangedListener() {
     return onFpsChangedListener;
   }
@@ -1898,9 +1968,8 @@ public final class MapboxMap {
    * Adds a callback that's invoked when the map is scrolled.
    *
    * @param listener The callback that's invoked when the map is scrolled.
-   *                 To unset the callback, use null.
    */
-  public void addOnScrollListener(@Nullable OnScrollListener listener) {
+  public void addOnScrollListener(@NonNull OnScrollListener listener) {
     onGesturesManagerInteractionListener.onAddScrollListener(listener);
   }
 
@@ -1908,9 +1977,8 @@ public final class MapboxMap {
    * Removes a callback that's invoked when the map is scrolled.
    *
    * @param listener The callback that's invoked when the map is scrolled.
-   *                 To unset the callback, use null.
    */
-  public void removeOnScrollListener(@Nullable OnScrollListener listener) {
+  public void removeOnScrollListener(@NonNull OnScrollListener listener) {
     onGesturesManagerInteractionListener.onRemoveScrollListener(listener);
   }
 
@@ -1930,9 +1998,8 @@ public final class MapboxMap {
    * Adds a callback that's invoked when the map is flinged.
    *
    * @param listener The callback that's invoked when the map is flinged.
-   *                 To unset the callback, use null.
    */
-  public void addOnFlingListener(@Nullable OnFlingListener listener) {
+  public void addOnFlingListener(@NonNull OnFlingListener listener) {
     onGesturesManagerInteractionListener.onAddFlingListener(listener);
   }
 
@@ -1940,9 +2007,8 @@ public final class MapboxMap {
    * Removes a callback that's invoked when the map is flinged.
    *
    * @param listener The callback that's invoked when the map is flinged.
-   *                 To unset the callback, use null.
    */
-  public void removeOnFlingListener(@Nullable OnFlingListener listener) {
+  public void removeOnFlingListener(@NonNull OnFlingListener listener) {
     onGesturesManagerInteractionListener.onRemoveFlingListener(listener);
   }
 
@@ -1951,7 +2017,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is moved.
    */
-  public void addOnMoveListener(OnMoveListener listener) {
+  public void addOnMoveListener(@NonNull OnMoveListener listener) {
     onGesturesManagerInteractionListener.onAddMoveListener(listener);
   }
 
@@ -1960,7 +2026,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is moved.
    */
-  public void removeOnMoveListener(OnMoveListener listener) {
+  public void removeOnMoveListener(@NonNull OnMoveListener listener) {
     onGesturesManagerInteractionListener.onRemoveMoveListener(listener);
   }
 
@@ -1969,7 +2035,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is rotated.
    */
-  public void addOnRotateListener(OnRotateListener listener) {
+  public void addOnRotateListener(@NonNull OnRotateListener listener) {
     onGesturesManagerInteractionListener.onAddRotateListener(listener);
   }
 
@@ -1978,7 +2044,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is rotated.
    */
-  public void removeOnRotateListener(OnRotateListener listener) {
+  public void removeOnRotateListener(@NonNull OnRotateListener listener) {
     onGesturesManagerInteractionListener.onRemoveRotateListener(listener);
   }
 
@@ -1987,7 +2053,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is scaled.
    */
-  public void addOnScaleListener(OnScaleListener listener) {
+  public void addOnScaleListener(@NonNull OnScaleListener listener) {
     onGesturesManagerInteractionListener.onAddScaleListener(listener);
   }
 
@@ -1996,7 +2062,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is scaled.
    */
-  public void removeOnScaleListener(OnScaleListener listener) {
+  public void removeOnScaleListener(@NonNull OnScaleListener listener) {
     onGesturesManagerInteractionListener.onRemoveScaleListener(listener);
   }
 
@@ -2005,7 +2071,7 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is tilted.
    */
-  public void addOnShoveListener(OnShoveListener listener) {
+  public void addOnShoveListener(@NonNull OnShoveListener listener) {
     onGesturesManagerInteractionListener.onAddShoveListener(listener);
   }
 
@@ -2014,27 +2080,43 @@ public final class MapboxMap {
    *
    * @param listener The callback that's invoked when the map is tilted.
    */
-  public void removeOnShoveListener(OnShoveListener listener) {
+  public void removeOnShoveListener(@NonNull OnShoveListener listener) {
     onGesturesManagerInteractionListener.onRemoveShoveListener(listener);
   }
 
   /**
-   * Sets a custom {@link AndroidGesturesManager} to handle {@link android.view.MotionEvent}s registered by the map.
+   * Sets a custom {@link AndroidGesturesManager} to handle {@link android.view.MotionEvent}s
+   * registered by the {@link MapView}.
    *
-   * @param androidGesturesManager Gestures manager that interprets gestures based on the motion events.
+   * @param androidGesturesManager       Gestures manager that interprets gestures based on the motion events.
+   * @param attachDefaultListeners       If true, pre-defined listeners will be attach
+   *                                     to change map based on {@link AndroidGesturesManager} callbacks.
+   * @param setDefaultMutuallyExclusives If true, pre-defined mutually exclusive gesture sets
+   *                                     will be added to the passed gestures manager.
    * @see <a href="https://github.com/mapbox/mapbox-gestures-android">mapbox-gestures-android library</a>
    */
-  public void setGesturesManager(AndroidGesturesManager androidGesturesManager) {
-    onGesturesManagerInteractionListener.setGesturesManager(androidGesturesManager);
+  public void setGesturesManager(@NonNull AndroidGesturesManager androidGesturesManager, boolean attachDefaultListeners,
+                                 boolean setDefaultMutuallyExclusives) {
+    onGesturesManagerInteractionListener.setGesturesManager(
+      androidGesturesManager, attachDefaultListeners, setDefaultMutuallyExclusives);
   }
 
   /**
-   * Get current {@link AndroidGesturesManager} that handles {@link android.view.MotionEvent}s registered by the map.
+   * Get current {@link AndroidGesturesManager} that handles {@link android.view.MotionEvent}s
+   * registered by the {@link MapView}
    *
    * @return Current gestures manager.
    */
+  @NonNull
   public AndroidGesturesManager getGesturesManager() {
     return onGesturesManagerInteractionListener.getGesturesManager();
+  }
+
+  /**
+   * Interrupts any ongoing gesture velocity animations.
+   */
+  public void cancelAllVelocityAnimations() {
+    onGesturesManagerInteractionListener.cancelAllVelocityAnimations();
   }
 
   /**
@@ -2053,9 +2135,8 @@ public final class MapboxMap {
    * Adds a callback that's invoked when the user clicks on the map view.
    *
    * @param listener The callback that's invoked when the user clicks on the map view.
-   *                 To unset the callback, use null.
    */
-  public void addOnMapClickListener(@Nullable OnMapClickListener listener) {
+  public void addOnMapClickListener(@NonNull OnMapClickListener listener) {
     onGesturesManagerInteractionListener.onAddMapClickListener(listener);
   }
 
@@ -2063,9 +2144,8 @@ public final class MapboxMap {
    * Removes a callback that's invoked when the user clicks on the map view.
    *
    * @param listener The callback that's invoked when the user clicks on the map view.
-   *                 To unset the callback, use null.
    */
-  public void removeOnMapClickListener(@Nullable OnMapClickListener listener) {
+  public void removeOnMapClickListener(@NonNull OnMapClickListener listener) {
     onGesturesManagerInteractionListener.onRemoveMapClickListener(listener);
   }
 
@@ -2085,9 +2165,8 @@ public final class MapboxMap {
    * Adds a callback that's invoked when the user long clicks on the map view.
    *
    * @param listener The callback that's invoked when the user long clicks on the map view.
-   *                 To unset the callback, use null.
    */
-  public void addOnMapLongClickListener(@Nullable OnMapLongClickListener listener) {
+  public void addOnMapLongClickListener(@NonNull OnMapLongClickListener listener) {
     onGesturesManagerInteractionListener.onAddMapLongClickListener(listener);
   }
 
@@ -2095,9 +2174,8 @@ public final class MapboxMap {
    * Removes a callback that's invoked when the user long clicks on the map view.
    *
    * @param listener The callback that's invoked when the user long clicks on the map view.
-   *                 To unset the callback, use null.
    */
-  public void removeOnMapLongClickListener(@Nullable OnMapLongClickListener listener) {
+  public void removeOnMapLongClickListener(@NonNull OnMapLongClickListener listener) {
     onGesturesManagerInteractionListener.onRemoveMapLongClickListener(listener);
   }
 
@@ -2116,6 +2194,7 @@ public final class MapboxMap {
    *
    * @return Current active InfoWindow Click Listener
    */
+  @Nullable
   public OnInfoWindowClickListener getOnInfoWindowClickListener() {
     return annotationManager.getInfoWindowManager().getOnInfoWindowClickListener();
   }
@@ -2136,6 +2215,7 @@ public final class MapboxMap {
    *
    * @return Current active InfoWindow long Click Listener
    */
+  @Nullable
   public OnInfoWindowLongClickListener getOnInfoWindowLongClickListener() {
     return annotationManager.getInfoWindowManager().getOnInfoWindowLongClickListener();
   }
@@ -2154,109 +2234,9 @@ public final class MapboxMap {
    *
    * @return Current active InfoWindow Close Listener
    */
+  @Nullable
   public OnInfoWindowCloseListener getOnInfoWindowCloseListener() {
     return annotationManager.getInfoWindowManager().getOnInfoWindowCloseListener();
-  }
-
-  //
-  // User location
-  //
-
-  /**
-   * Returns the status of the my-location layer.
-   *
-   * @return True if the my-location layer is enabled, false otherwise.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public boolean isMyLocationEnabled() {
-    return trackingSettings.isMyLocationEnabled();
-  }
-
-  /**
-   * <p>
-   * Enables or disables the my-location layer.
-   * While enabled, the my-location layer continuously draws an indication of a user's current
-   * location and bearing.
-   * </p>
-   * In order to use the my-location layer feature you need to request permission for either
-   * android.Manifest.permission#ACCESS_COARSE_LOCATION or android.Manifest.permission#ACCESS_FINE_LOCATION.
-   *
-   * @param enabled True to enable; false to disable.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public void setMyLocationEnabled(boolean enabled) {
-    trackingSettings.setMyLocationEnabled(enabled);
-  }
-
-  /**
-   * Returns the currently displayed user location, or null if there is no location data available.
-   *
-   * @return The currently displayed user location.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Nullable
-  @Deprecated
-  public Location getMyLocation() {
-    return trackingSettings.getMyLocation();
-  }
-
-  /**
-   * Sets a callback that's invoked when the the My Location view
-   * (which signifies the user's location) changes location.
-   *
-   * @param listener The callback that's invoked when the user clicks on a marker.
-   *                 To unset the callback, use null.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public void setOnMyLocationChangeListener(@Nullable MapboxMap.OnMyLocationChangeListener
-                                              listener) {
-    trackingSettings.setOnMyLocationChangeListener(listener);
-  }
-
-  /**
-   * Replaces the location source of the my-location layer.
-   *
-   * @param locationSource A {@link LocationEngine} location source to use in the my-location layer.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public void setLocationSource(@Nullable LocationEngine locationSource) {
-    trackingSettings.setLocationSource(locationSource);
-  }
-
-  /**
-   * Sets a callback that's invoked when the location tracking mode changes.
-   *
-   * @param listener The callback that's invoked when the location tracking mode changes.
-   *                 To unset the callback, use null.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public void setOnMyLocationTrackingModeChangeListener(
-    @Nullable MapboxMap.OnMyLocationTrackingModeChangeListener listener) {
-    trackingSettings.setOnMyLocationTrackingModeChangeListener(listener);
-  }
-
-  /**
-   * Sets a callback that's invoked when the bearing tracking mode changes.
-   *
-   * @param listener The callback that's invoked when the bearing tracking mode changes.
-   *                 To unset the callback, use null.
-   * @deprecated use location layer plugin from
-   * https://github.com/mapbox/mapbox-plugins-android/tree/master/plugin-locationlayer instead.
-   */
-  @Deprecated
-  public void setOnMyBearingTrackingModeChangeListener(@Nullable OnMyBearingTrackingModeChangeListener listener) {
-    trackingSettings.setOnMyBearingTrackingModeChangeListener(listener);
   }
 
   //
@@ -2289,13 +2269,13 @@ public final class MapboxMap {
    * Queries the map for rendered features
    *
    * @param coordinates the point to query
-   * @param filter      filters the returned features
+   * @param filter      filters the returned features with an expression
    * @param layerIds    optionally - only query these layers
    * @return the list of feature
    */
   @NonNull
   public List<Feature> queryRenderedFeatures(@NonNull PointF coordinates,
-                                             @Nullable Filter.Statement filter,
+                                             @Nullable Expression filter,
                                              @Nullable String... layerIds) {
     return nativeMapView.queryRenderedFeatures(coordinates, layerIds, filter);
   }
@@ -2317,24 +2297,38 @@ public final class MapboxMap {
    * Queries the map for rendered features
    *
    * @param coordinates the box to query
-   * @param filter      filters the returned features
+   * @param filter      filters the returned features with an expression
    * @param layerIds    optionally - only query these layers
    * @return the list of feature
    */
   @NonNull
   public List<Feature> queryRenderedFeatures(@NonNull RectF coordinates,
-                                             @Nullable Filter.Statement filter,
+                                             @Nullable Expression filter,
                                              @Nullable String... layerIds) {
     return nativeMapView.queryRenderedFeatures(coordinates, layerIds, filter);
   }
 
-  FocalPointChangeListener createFocalPointChangeListener() {
-    return new FocalPointChangeListener() {
-      @Override
-      public void onFocalPointChanged(PointF pointF) {
-        focalPoint = pointF;
-      }
-    };
+  //
+  // LocationComponent
+  //
+
+  void injectLocationComponent(LocationComponent locationComponent) {
+    this.locationComponent = locationComponent;
+  }
+
+  /**
+   * Returns the {@link LocationComponent} that can be used to display user's location on the map.
+   * <p>
+   * Use {@link LocationComponent#activateLocationComponent(Context)} or any overload to activate the component,
+   * then, enable it with {@link LocationComponent#setLocationComponentEnabled(boolean)}.
+   * <p>
+   * You can customize the location icon and more with {@link com.mapbox.mapboxsdk.location.LocationComponentOptions}.
+   *
+   * @return the Location Component
+   */
+  @NonNull
+  public LocationComponent getLocationComponent() {
+    return locationComponent;
   }
 
   //
@@ -2373,11 +2367,11 @@ public final class MapboxMap {
    * @see MapboxMap#addOnMoveListener(OnMoveListener)
    */
   public interface OnMoveListener {
-    void onMoveBegin(MoveGestureDetector detector);
+    void onMoveBegin(@NonNull MoveGestureDetector detector);
 
-    void onMove(MoveGestureDetector detector);
+    void onMove(@NonNull MoveGestureDetector detector);
 
-    void onMoveEnd(MoveGestureDetector detector);
+    void onMoveEnd(@NonNull MoveGestureDetector detector);
   }
 
   /**
@@ -2386,11 +2380,11 @@ public final class MapboxMap {
    * @see MapboxMap#addOnRotateListener(OnRotateListener)
    */
   public interface OnRotateListener {
-    void onRotateBegin(RotateGestureDetector detector);
+    void onRotateBegin(@NonNull RotateGestureDetector detector);
 
-    void onRotate(RotateGestureDetector detector);
+    void onRotate(@NonNull RotateGestureDetector detector);
 
-    void onRotateEnd(RotateGestureDetector detector);
+    void onRotateEnd(@NonNull RotateGestureDetector detector);
   }
 
   /**
@@ -2399,11 +2393,11 @@ public final class MapboxMap {
    * @see MapboxMap#addOnScaleListener(OnScaleListener)
    */
   public interface OnScaleListener {
-    void onScaleBegin(StandardScaleGestureDetector detector);
+    void onScaleBegin(@NonNull StandardScaleGestureDetector detector);
 
-    void onScale(StandardScaleGestureDetector detector);
+    void onScale(@NonNull StandardScaleGestureDetector detector);
 
-    void onScaleEnd(StandardScaleGestureDetector detector);
+    void onScaleEnd(@NonNull StandardScaleGestureDetector detector);
   }
 
   /**
@@ -2412,11 +2406,11 @@ public final class MapboxMap {
    * @see MapboxMap#addOnShoveListener(OnShoveListener)
    */
   public interface OnShoveListener {
-    void onShoveBegin(ShoveGestureDetector detector);
+    void onShoveBegin(@NonNull ShoveGestureDetector detector);
 
-    void onShove(ShoveGestureDetector detector);
+    void onShove(@NonNull ShoveGestureDetector detector);
 
-    void onShoveEnd(ShoveGestureDetector detector);
+    void onShoveEnd(@NonNull ShoveGestureDetector detector);
   }
 
   /**
@@ -2564,7 +2558,10 @@ public final class MapboxMap {
 
     AndroidGesturesManager getGesturesManager();
 
-    void setGesturesManager(AndroidGesturesManager gesturesManager);
+    void setGesturesManager(AndroidGesturesManager gesturesManager, boolean attachDefaultListeners,
+                            boolean setDefaultMutuallyExclusives);
+
+    void cancelAllVelocityAnimations();
   }
 
   /**
@@ -2665,7 +2662,7 @@ public final class MapboxMap {
      *
      * @param marker The marker were the info window is attached to
      */
-    void onInfoWindowLongClick(Marker marker);
+    void onInfoWindowLongClick(@NonNull Marker marker);
   }
 
   /**
@@ -2680,7 +2677,7 @@ public final class MapboxMap {
      *
      * @param marker The marker of the info window that was closed.
      */
-    void onInfoWindowClose(Marker marker);
+    void onInfoWindowClose(@NonNull Marker marker);
   }
 
   /**
@@ -2705,7 +2702,9 @@ public final class MapboxMap {
    *
    * @param <U> the instance type of MarkerView
    * @deprecated Use a {@link com.mapbox.mapboxsdk.style.layers.SymbolLayer} instead. An example of converting Android
-   * SDK views to be used as a symbol see https://github.com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android/MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
+   * SDK views to be used as a symbol see https://github
+   * .com/mapbox/mapbox-gl-native/blob/68f32bc104422207c64da8d90e8411b138d87f04/platform/android
+   * /MapboxGLAndroidSDKTestApp/src/main/java/com/mapbox/mapboxsdk/testapp/activity/style/SymbolGeneratorActivity.java
    */
   @Deprecated
   public abstract static class MarkerViewAdapter<U extends MarkerView> {
@@ -2719,10 +2718,9 @@ public final class MapboxMap {
      *
      * @param context the context associated to a MapView
      */
-    @SuppressWarnings("unchecked")
-    public MarkerViewAdapter(Context context) {
+    public MarkerViewAdapter(Context context, Class<U> persistentClass) {
       this.context = context;
-      persistentClass = (Class<U>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+      this.persistentClass = persistentClass;
       viewReusePool = new Pools.SimplePool<>(10000);
     }
 
@@ -2837,51 +2835,6 @@ public final class MapboxMap {
   }
 
   /**
-   * Interface definition for a callback to be invoked when the the My Location view changes location.
-   *
-   * @see MapboxMap#setOnMyLocationChangeListener(OnMyLocationChangeListener)
-   */
-  public interface OnMyLocationChangeListener {
-    /**
-     * Called when the location of the My Location view has changed
-     * (be it latitude/longitude, bearing or accuracy).
-     *
-     * @param location The current location of the My Location view The type of map change event.
-     */
-    void onMyLocationChange(@Nullable Location location);
-  }
-
-  /**
-   * Interface definition for a callback to be invoked when the the My Location tracking mode changes.
-   *
-   * @see TrackingSettings#setMyLocationTrackingMode(int)
-   */
-  public interface OnMyLocationTrackingModeChangeListener {
-
-    /**
-     * Called when the tracking mode of My Location tracking has changed
-     *
-     * @param myLocationTrackingMode the current active location tracking mode
-     */
-    void onMyLocationTrackingModeChange(@MyLocationTracking.Mode int myLocationTrackingMode);
-  }
-
-  /**
-   * Interface definition for a callback to be invoked when the the My Location tracking mode changes.
-   *
-   * @see TrackingSettings#setMyLocationTrackingMode(int)
-   */
-  public interface OnMyBearingTrackingModeChangeListener {
-
-    /**
-     * Called when the tracking mode of My Bearing tracking has changed
-     *
-     * @param myBearingTrackingMode the current active bearing tracking mode
-     */
-    void onMyBearingTrackingModeChange(@MyBearingTracking.Mode int myBearingTrackingMode);
-  }
-
-  /**
    * Interface definition for a callback to be invoked when a task is complete or cancelled.
    */
   public interface CancelableCallback {
@@ -2905,7 +2858,7 @@ public final class MapboxMap {
      *
      * @param snapshot the snapshot bitmap
      */
-    void onSnapshotReady(Bitmap snapshot);
+    void onSnapshotReady(@NonNull Bitmap snapshot);
   }
 
   /**
@@ -2917,12 +2870,13 @@ public final class MapboxMap {
      *
      * @param style the style that has been loaded
      */
-    void onStyleLoaded(String style);
+    void onStyleLoaded(@NonNull String style);
   }
 
   //
   // Used for instrumentation testing
   //
+  @NonNull
   Transform getTransform() {
     return transform;
   }
