@@ -81,7 +81,7 @@ A nightly build of the dynamic framework, based on the master branch, is availab
 
 You can alternatively install the SDK as a static framework:
 
-1. Build from source using the `make ipackage` command.
+1. Build from source using the `make iframework FORMAT=static BUILDTYPE=Release` command.
 
 1. Drag the Mapbox.bundle and Mapbox.framework from the `build/ios/pkg/static/` directory into the Project navigator. In the sheet that appears, make sure “Copy items if needed” is checked, then click Finish. Open the project editor and select your application target to verify that the following changes occurred automatically:
 
@@ -104,12 +104,14 @@ You can alternatively install the SDK as a static framework:
 
 #### CocoaPods
 
+For instructions on installing stable release versions of the Mapbox Maps SDK for iOS with CocoaPods, see [our website](https://www.mapbox.com/install/ios/cocoapods/).
+
 ##### Testing pre-releases with CocoaPods
 
-To test pre-releases and/or betas, you can reference the pre-release like so in your Podfile:
+To test pre-releases of the dynamic framework, directly specify the version in your Podfile:
 
 ```rb
-pod 'Mapbox-iOS-SDK', podspec: 'https://raw.githubusercontent.com/mapbox/mapbox-gl-native/<insert branch or tag>/platform/ios/Mapbox-iOS-SDK.podspec'
+pod 'Mapbox-iOS-SDK', '~> x.x.x-alpha.1'
 ```
 
 ##### Testing nightly releases with CocoaPods
@@ -140,7 +142,11 @@ For instructions on installing stable release versions of the Mapbox Maps SDK fo
 
 ##### Testing pre-releases with Carthage
 
-Carthage currently does not support pre-release versions of binaries.
+To test pre-releases of the dynamic framework, directly specify the version in your Cartfile:
+
+```json
+binary "https://www.mapbox.com/ios-sdk/Mapbox-iOS-SDK.json" ~> x.x.x-alpha.1
+```
 
 ##### Using your own build with Carthage
 

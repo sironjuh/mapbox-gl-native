@@ -1,7 +1,9 @@
 package com.mapbox.mapboxsdk.testapp.activity.fragment;
 
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
+
 import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.constants.Style;
@@ -21,7 +23,7 @@ import com.mapbox.mapboxsdk.testapp.R;
  * </p>
  */
 public class SupportMapFragmentActivity extends AppCompatActivity implements MapFragment.OnMapViewReadyCallback,
-  OnMapReadyCallback, MapView.OnMapChangedListener {
+  OnMapReadyCallback, MapView.OnDidFinishRenderingFrameListener {
 
   private MapboxMap mapboxMap;
   private MapView mapView;
@@ -65,26 +67,26 @@ public class SupportMapFragmentActivity extends AppCompatActivity implements Map
   @Override
   public void onMapViewReady(MapView map) {
     mapView = map;
-    mapView.addOnMapChangedListener(this);
+    mapView.addOnDidFinishRenderingFrameListener(this);
   }
 
   @Override
-  public void onMapReady(MapboxMap map) {
+  public void onMapReady(@NonNull MapboxMap map) {
     mapboxMap = map;
-  }
-
-  @Override
-  public void onMapChanged(int change) {
-    if (initialCameraAnimation && change == MapView.DID_FINISH_RENDERING_MAP_FULLY_RENDERED) {
-      mapboxMap.animateCamera(
-        CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder().tilt(45.0).build()), 5000);
-      initialCameraAnimation = false;
-    }
   }
 
   @Override
   protected void onDestroy() {
     super.onDestroy();
-    mapView.removeOnMapChangedListener(this);
+    mapView.removeOnDidFinishRenderingFrameListener(this);
+  }
+
+  @Override
+  public void onDidFinishRenderingFrame(boolean fully) {
+    if (initialCameraAnimation && fully && mapboxMap != null) {
+      mapboxMap.animateCamera(
+        CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder().tilt(45.0).build()), 5000);
+      initialCameraAnimation = false;
+    }
   }
 }

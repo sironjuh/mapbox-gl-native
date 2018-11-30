@@ -87,7 +87,7 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
   }
 
   @Override
-  public void onMapReady(final MapboxMap map) {
+  public void onMapReady(@NonNull final MapboxMap map) {
     mapboxMap = map;
     addSymbolClickListener();
     new LoadDataTask(this).execute();
@@ -105,6 +105,8 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
           "hello from: " + feature.getStringProperty(FEATURE_NAME),
           Toast.LENGTH_LONG).show();
       }
+
+      return false;
     });
   }
 

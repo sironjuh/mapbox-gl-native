@@ -1,7 +1,6 @@
 set(USE_GLES2 ON)
 
 include(cmake/sqlite.cmake)
-include(cmake/icu.cmake)
 
 # Build thin archives.
 set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> cruT <TARGET> <LINK_FLAGS> <OBJECTS>")
@@ -43,13 +42,8 @@ macro(mbgl_platform_core)
         PRIVATE platform/android
     )
 
-    target_add_mason_package(mbgl-core PUBLIC geojson)
-    target_add_mason_package(mbgl-core PUBLIC jni.hpp)
-    target_add_mason_package(mbgl-core PUBLIC rapidjson)
-
     target_link_libraries(mbgl-core
-        PRIVATE icu
-        PUBLIC expected
+        PUBLIC jni.hpp
         PUBLIC -llog
         PUBLIC -landroid
         PUBLIC -ljnigraphics
@@ -66,11 +60,9 @@ macro(mbgl_filesource)
     # Modify platform/android/filesource-files.txt to change the source files for this target.
     target_sources_from_file(mbgl-filesource PRIVATE platform/android/filesource-files.txt)
 
-    target_add_mason_package(mbgl-filesource PUBLIC jni.hpp)
-
     target_link_libraries(mbgl-filesource
-        PRIVATE codecvt
         PUBLIC sqlite
+        PUBLIC jni.hpp
         PUBLIC -llog
         PUBLIC -landroid
         PUBLIC -lstdc++
@@ -84,8 +76,11 @@ add_library(mapbox-gl SHARED
     platform/android/src/main.cpp
 )
 
+target_include_directories(mapbox-gl
+    PRIVATE src
+)
+
 target_link_libraries(mapbox-gl
-    PRIVATE codecvt
     PRIVATE mbgl-core
     PRIVATE mbgl-filesource
 )
@@ -106,7 +101,6 @@ macro(mbgl_platform_test)
     )
 
     target_link_libraries(mbgl-test
-        PRIVATE codecvt
         PRIVATE mbgl-core
         PRIVATE mbgl-filesource
     )

@@ -77,7 +77,6 @@ class LocationComponentTest : BaseActivityTest() {
         assertThat(locationEngine, notNullValue())
 
         uiController.loopMainThreadForAtLeast(MAP_CONNECTION_DELAY)
-        assertThat(locationEngine?.isConnected, `is`(true))
       }
     }
 
@@ -107,7 +106,6 @@ class LocationComponentTest : BaseActivityTest() {
         assertThat(componentOptions, notNullValue())
 
         uiController.loopMainThreadForAtLeast(MAP_CONNECTION_DELAY)
-        assertThat(locationEngine?.isConnected, `is`(true))
         assertThat(componentOptions?.accuracyAlpha(), `is`(.5f))
         assertThat(componentOptions?.accuracyColor(), `is`(Color.BLUE))
       }
@@ -1100,6 +1098,29 @@ class LocationComponentTest : BaseActivityTest() {
   }
 
   @Test
+  fun cameraPositionSnappedToTargetIfExceedsThreshold() {
+    val componentAction = object : LocationComponentAction.OnPerformLocationComponentAction {
+      override fun onLocationComponentAction(component: LocationComponent, mapboxMap: MapboxMap,
+                                             uiController: UiController, context: Context) {
+        component.activateLocationComponent(context, false)
+        component.isLocationComponentEnabled = true
+        val target = LatLng(51.0, 17.0)
+        assertTrue(target.distanceTo(LatLng(location)) > LocationComponentConstants.INSTANT_LOCATION_TRANSITION_THRESHOLD)
+        component.cameraMode = CameraMode.NONE
+        component.forceLocationUpdate(location)
+        mapboxMap.moveCamera(CameraUpdateFactory.newLatLng(target))
+        mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(90.0))
+        component.cameraMode = CameraMode.TRACKING_GPS
+        assertEquals(location.bearing.toDouble(), mapboxMap.cameraPosition.bearing, 0.1)
+        assertEquals(location.latitude, mapboxMap.cameraPosition.target.latitude, 0.1)
+        assertEquals(location.longitude, mapboxMap.cameraPosition.target.longitude, 0.1)
+      }
+    }
+
+    executeComponentTest(componentAction)
+  }
+
+  @Test
   fun compassEngine_onComponentInitializedDefaultIsProvided() {
     val componentAction = object : LocationComponentAction.OnPerformLocationComponentAction {
       override fun onLocationComponentAction(component: LocationComponent, mapboxMap: MapboxMap,
@@ -1145,25 +1166,6 @@ class LocationComponentTest : BaseActivityTest() {
         component.compassEngine = engine
         assertThat(component.compassEngine, notNullValue())
         assertThat(component.compassEngine, `is`(equalTo(engine)))
-      }
-    }
-
-    executeComponentTest(componentAction)
-  }
-
-  @Test
-  fun defaultLocationEngine_deactivatedWhenDestroyed() {
-    val componentAction = object : LocationComponentAction.OnPerformLocationComponentAction {
-      override fun onLocationComponentAction(component: LocationComponent, mapboxMap: MapboxMap,
-                                             uiController: UiController, context: Context) {
-        component.activateLocationComponent(context)
-        component.isLocationComponentEnabled = true
-        uiController.loopMainThreadForAtLeast(MAP_CONNECTION_DELAY)
-        assertThat(component.locationEngine?.isConnected, `is`(true))
-
-        component.onStop()
-        component.onDestroy()
-        assertThat(component.locationEngine?.isConnected, `is`(false))
       }
     }
 

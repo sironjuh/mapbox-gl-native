@@ -27,9 +27,6 @@
         <attr name="mapbox_uiTiltGestures" format="boolean"/>
         <attr name="mapbox_uiDoubleTapGestures" format="boolean"/>
 
-        <!--UI-Controls-->
-        <attr name="mapbox_uiZoomControls" format="boolean"/>
-
         <!--Compass-->
         <attr name="mapbox_uiCompass" format="boolean"/>
         <attr name="mapbox_uiCompassGravity">
@@ -162,10 +159,6 @@
         <!-- Map layer configuration -->
         <attr name="mapbox_layer_below" format="string"/>
 
-        <!-- Map zoom levels -->
-        <attr name="mapbox_maxZoom" format="float"/>
-        <attr name="mapbox_minZoom" format="float"/>
-
         <!-- Icon scale based on map zoom levels -->
         <attr name="mapbox_maxZoomIconScale" format="float"/>
         <attr name="mapbox_minZoomIconScale" format="float"/>
@@ -174,6 +167,9 @@
         <attr name="mapbox_trackingGesturesManagement" format="boolean"/>
         <attr name="mapbox_trackingInitialMoveThreshold" format="dimension"/>
         <attr name="mapbox_trackingMultiFingerMoveThreshold" format="dimension"/>
+
+        <!-- Animation duration multiplier -->
+        <attr name="mapbox_trackingAnimationDurationMultiplier" format="float" />
 
     </declare-styleable>
 </resources>

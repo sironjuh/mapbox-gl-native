@@ -18,7 +18,7 @@
 #include "geojson/geometry.hpp"
 #include "geometry/lat_lng.hpp"
 #include "geometry/projected_meters.hpp"
-#include "style/layers/layers.hpp"
+#include "style/layers/layer_manager.hpp"
 #include "style/sources/source.hpp"
 #include "geometry/lat_lng_bounds.hpp"
 #include "map/camera_position.hpp"
@@ -55,9 +55,6 @@ public:
                   jni::jboolean);
 
     virtual ~NativeMapView();
-
-    // Deprecated //
-    void notifyMapChange(mbgl::MapChange);
 
     // mbgl::RendererBackend (mbgl::MapObserver) //
     void onCameraWillChange(MapObserver::CameraChangeMode) override;

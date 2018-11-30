@@ -1,6 +1,4 @@
-include(cmake/nunicode.cmake)
 include(cmake/sqlite.cmake)
-include(cmake/icu.cmake)
 
 add_library(mbgl-loop-uv STATIC
     platform/default/async_task.cpp
@@ -49,6 +47,7 @@ macro(mbgl_platform_core)
         PRIVATE platform/default/thread.cpp
         PRIVATE platform/default/bidi.cpp
         PRIVATE platform/default/collator.cpp
+        PRIVATE platform/default/layer_manager.cpp
         PRIVATE platform/default/local_glyph_rasterizer.cpp
         PRIVATE platform/default/thread_local.cpp
         PRIVATE platform/default/unaccent.cpp
@@ -67,6 +66,10 @@ macro(mbgl_platform_core)
         PRIVATE platform/default/mbgl/gl/headless_backend.cpp
         PRIVATE platform/default/mbgl/gl/headless_backend.hpp
 
+        # Snapshotting
+        PRIVATE platform/default/mbgl/map/map_snapshotter.cpp
+        PRIVATE platform/default/mbgl/map/map_snapshotter.hpp
+
         # Thread pool
         PRIVATE platform/default/mbgl/util/default_thread_pool.cpp
         PRIVATE platform/default/mbgl/util/default_thread_pool.cpp
@@ -80,7 +83,6 @@ macro(mbgl_platform_core)
 
     target_add_mason_package(mbgl-core PUBLIC libpng)
     target_add_mason_package(mbgl-core PUBLIC libjpeg-turbo)
-    target_add_mason_package(mbgl-core PUBLIC geojson)
 
     target_link_libraries(mbgl-core
         PRIVATE nunicode

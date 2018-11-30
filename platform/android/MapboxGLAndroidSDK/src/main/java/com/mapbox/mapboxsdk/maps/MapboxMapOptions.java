@@ -13,6 +13,7 @@ import android.support.annotation.Nullable;
 import android.support.v4.content.res.ResourcesCompat;
 import android.util.AttributeSet;
 import android.view.Gravity;
+
 import com.mapbox.mapboxsdk.R;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.constants.MapboxConstants;
@@ -62,7 +63,6 @@ public class MapboxMapOptions implements Parcelable {
   private boolean scrollGesturesEnabled = true;
   private boolean tiltGesturesEnabled = true;
   private boolean zoomGesturesEnabled = true;
-  private boolean zoomControlsEnabled = false;
   private boolean doubleTapGesturesEnabled = true;
 
   private boolean prefetchesTiles = true;
@@ -119,7 +119,6 @@ public class MapboxMapOptions implements Parcelable {
     rotateGesturesEnabled = in.readByte() != 0;
     scrollGesturesEnabled = in.readByte() != 0;
     tiltGesturesEnabled = in.readByte() != 0;
-    zoomControlsEnabled = in.readByte() != 0;
     zoomGesturesEnabled = in.readByte() != 0;
     doubleTapGesturesEnabled = in.readByte() != 0;
 
@@ -143,6 +142,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param attrs   Attributeset containing configuration
    * @return the MapboxMapOptions created from attributes
    */
+  @NonNull
   public static MapboxMapOptions createFromAttributes(@NonNull Context context, @Nullable AttributeSet attrs) {
     MapboxMapOptions mapboxMapOptions = new MapboxMapOptions();
     float pxlRatio = context.getResources().getDisplayMetrics().density;
@@ -161,8 +161,6 @@ public class MapboxMapOptions implements Parcelable {
         typedArray.getBoolean(R.styleable.mapbox_MapView_mapbox_uiRotateGestures, true));
       mapboxMapOptions.tiltGesturesEnabled(
         typedArray.getBoolean(R.styleable.mapbox_MapView_mapbox_uiTiltGestures, true));
-      mapboxMapOptions.zoomControlsEnabled(
-        typedArray.getBoolean(R.styleable.mapbox_MapView_mapbox_uiZoomControls, false));
       mapboxMapOptions.doubleTapGesturesEnabled(
         typedArray.getBoolean(R.styleable.mapbox_MapView_mapbox_uiDoubleTapGestures, true));
 
@@ -250,6 +248,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param apiBaseUrl The base of our API endpoint
    * @return This
    */
+  @NonNull
   public MapboxMapOptions apiBaseUrl(String apiBaseUrl) {
     this.apiBaseUrl = apiBaseUrl;
     return this;
@@ -261,6 +260,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param cameraPosition Inital camera position
    * @return This
    */
+  @NonNull
   public MapboxMapOptions camera(CameraPosition cameraPosition) {
     this.cameraPosition = cameraPosition;
     return this;
@@ -272,6 +272,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param styleUrl Url to be used to load a styleUrl
    * @return This
    */
+  @NonNull
   public MapboxMapOptions styleUrl(String styleUrl) {
     this.styleUrl = styleUrl;
     return this;
@@ -283,6 +284,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param styleJson json to used as style
    * @return This
    */
+  @NonNull
   public MapboxMapOptions styleJson(String styleJson) {
     this.styleJson = styleJson;
     return this;
@@ -294,6 +296,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True is debug is enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions debugActive(boolean enabled) {
     debugActive = enabled;
     return this;
@@ -305,6 +308,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param minZoom Zoom level to be used
    * @return This
    */
+  @NonNull
   public MapboxMapOptions minZoomPreference(double minZoom) {
     this.minZoom = minZoom;
     return this;
@@ -316,6 +320,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param maxZoom Zoom level to be used
    * @return This
    */
+  @NonNull
   public MapboxMapOptions maxZoomPreference(double maxZoom) {
     this.maxZoom = maxZoom;
     return this;
@@ -327,6 +332,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and mapbox_compass_icon is shown
    * @return This
    */
+  @NonNull
   public MapboxMapOptions compassEnabled(boolean enabled) {
     compassEnabled = enabled;
     return this;
@@ -338,6 +344,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param gravity Android SDK Gravity.
    * @return This
    */
+  @NonNull
   public MapboxMapOptions compassGravity(int gravity) {
     compassGravity = gravity;
     return this;
@@ -349,6 +356,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param margins 4 long array for LTRB margins
    * @return This
    */
+  @NonNull
   public MapboxMapOptions compassMargins(int[] margins) {
     compassMargins = margins;
     return this;
@@ -363,6 +371,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param compassFadeWhenFacingNorth true is mapbox_compass_icon fades to invisble
    * @return This
    */
+  @NonNull
   public MapboxMapOptions compassFadesWhenFacingNorth(boolean compassFadeWhenFacingNorth) {
     this.fadeCompassFacingNorth = compassFadeWhenFacingNorth;
     return this;
@@ -377,6 +386,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param compass the drawable to show as image compass
    * @return This
    */
+  @NonNull
   public MapboxMapOptions compassImage(Drawable compass) {
     this.compassImage = compass;
     return this;
@@ -388,6 +398,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and logo is shown
    * @return This
    */
+  @NonNull
   public MapboxMapOptions logoEnabled(boolean enabled) {
     logoEnabled = enabled;
     return this;
@@ -399,6 +410,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param gravity Android SDK Gravity.
    * @return This
    */
+  @NonNull
   public MapboxMapOptions logoGravity(int gravity) {
     logoGravity = gravity;
     return this;
@@ -410,6 +422,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param margins 4 long array for LTRB margins
    * @return This
    */
+  @NonNull
   public MapboxMapOptions logoMargins(int[] margins) {
     logoMargins = margins;
     return this;
@@ -421,6 +434,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and attribution is shown
    * @return This
    */
+  @NonNull
   public MapboxMapOptions attributionEnabled(boolean enabled) {
     attributionEnabled = enabled;
     return this;
@@ -432,6 +446,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param gravity Android SDK Gravity.
    * @return This
    */
+  @NonNull
   public MapboxMapOptions attributionGravity(int gravity) {
     attributionGravity = gravity;
     return this;
@@ -443,6 +458,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param margins 4 long array for LTRB margins
    * @return This
    */
+  @NonNull
   public MapboxMapOptions attributionMargins(int[] margins) {
     attributionMargins = margins;
     return this;
@@ -454,6 +470,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param color integer resembling a color
    * @return This
    */
+  @NonNull
   public MapboxMapOptions attributionTintColor(@ColorInt int color) {
     attributionTintColor = color;
     return this;
@@ -465,6 +482,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and gesture will be enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions rotateGesturesEnabled(boolean enabled) {
     rotateGesturesEnabled = enabled;
     return this;
@@ -476,6 +494,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and gesture will be enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions scrollGesturesEnabled(boolean enabled) {
     scrollGesturesEnabled = enabled;
     return this;
@@ -487,19 +506,9 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and gesture will be enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions tiltGesturesEnabled(boolean enabled) {
     tiltGesturesEnabled = enabled;
-    return this;
-  }
-
-  /**
-   * Specifies if the zoom controls are enabled for a map view.
-   *
-   * @param enabled True and gesture will be enabled
-   * @return This
-   */
-  public MapboxMapOptions zoomControlsEnabled(boolean enabled) {
-    zoomControlsEnabled = enabled;
     return this;
   }
 
@@ -509,6 +518,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and gesture will be enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions zoomGesturesEnabled(boolean enabled) {
     zoomGesturesEnabled = enabled;
     return this;
@@ -520,6 +530,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enabled True and gesture will be enabled
    * @return This
    */
+  @NonNull
   public MapboxMapOptions doubleTapGesturesEnabled(boolean enabled) {
     doubleTapGesturesEnabled = enabled;
     return this;
@@ -538,11 +549,13 @@ public class MapboxMapOptions implements Parcelable {
    * @param textureMode True to enable texture mode
    * @return This
    */
+  @NonNull
   public MapboxMapOptions textureMode(boolean textureMode) {
     this.textureMode = textureMode;
     return this;
   }
 
+  @NonNull
   public MapboxMapOptions translucentTextureSurface(boolean translucentTextureSurface) {
     this.translucentTextureSurface = translucentTextureSurface;
     return this;
@@ -554,6 +567,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param loadColor the color to show during map creation
    * @return This
    */
+  @NonNull
   public MapboxMapOptions foregroundLoadColor(@ColorInt int loadColor) {
     this.foregroundLoadColor = loadColor;
     return this;
@@ -567,6 +581,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param enable true to enable
    * @return This
    */
+  @NonNull
   public MapboxMapOptions setPrefetchesTiles(boolean enable) {
     this.prefetchesTiles = enable;
     return this;
@@ -582,6 +597,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param crossSourceCollisions true to enable, false to disable
    * @return This
    */
+  @NonNull
   public MapboxMapOptions crossSourceCollisions(boolean crossSourceCollisions) {
     this.crossSourceCollisions = crossSourceCollisions;
     return this;
@@ -597,6 +613,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param fontFamily font family for local ideograph generation.
    * @return This
    */
+  @NonNull
   public MapboxMapOptions localIdeographFontFamily(String fontFamily) {
     this.localIdeographFontFamily = fontFamily;
     return this;
@@ -609,6 +626,7 @@ public class MapboxMapOptions implements Parcelable {
    * @param pixelRatio the custom pixel ratio of the map under construction
    * @return This
    */
+  @NonNull
   public MapboxMapOptions pixelRatio(float pixelRatio) {
     this.pixelRatio = pixelRatio;
     return this;
@@ -804,15 +822,6 @@ public class MapboxMapOptions implements Parcelable {
   }
 
   /**
-   * Get the current configured zoom controls state for a map view.
-   *
-   * @return True indicates gesture is enabled
-   */
-  public boolean getZoomControlsEnabled() {
-    return zoomControlsEnabled;
-  }
-
-  /**
    * Get the current configured zoom gesture state for a map view.
    *
    * @return True indicates gesture is enabled
@@ -919,7 +928,7 @@ public class MapboxMapOptions implements Parcelable {
   }
 
   public static final Parcelable.Creator<MapboxMapOptions> CREATOR = new Parcelable.Creator<MapboxMapOptions>() {
-    public MapboxMapOptions createFromParcel(Parcel in) {
+    public MapboxMapOptions createFromParcel(@NonNull Parcel in) {
       return new MapboxMapOptions(in);
     }
 
@@ -934,7 +943,7 @@ public class MapboxMapOptions implements Parcelable {
   }
 
   @Override
-  public void writeToParcel(Parcel dest, int flags) {
+  public void writeToParcel(@NonNull Parcel dest, int flags) {
     dest.writeParcelable(cameraPosition, flags);
     dest.writeByte((byte) (debugActive ? 1 : 0));
 
@@ -960,7 +969,6 @@ public class MapboxMapOptions implements Parcelable {
     dest.writeByte((byte) (rotateGesturesEnabled ? 1 : 0));
     dest.writeByte((byte) (scrollGesturesEnabled ? 1 : 0));
     dest.writeByte((byte) (tiltGesturesEnabled ? 1 : 0));
-    dest.writeByte((byte) (zoomControlsEnabled ? 1 : 0));
     dest.writeByte((byte) (zoomGesturesEnabled ? 1 : 0));
     dest.writeByte((byte) (doubleTapGesturesEnabled ? 1 : 0));
 
@@ -978,7 +986,7 @@ public class MapboxMapOptions implements Parcelable {
   }
 
   @Override
-  public boolean equals(Object o) {
+  public boolean equals(@Nullable Object o) {
     if (this == o) {
       return true;
     }
@@ -1036,9 +1044,6 @@ public class MapboxMapOptions implements Parcelable {
       return false;
     }
     if (zoomGesturesEnabled != options.zoomGesturesEnabled) {
-      return false;
-    }
-    if (zoomControlsEnabled != options.zoomControlsEnabled) {
       return false;
     }
     if (doubleTapGesturesEnabled != options.doubleTapGesturesEnabled) {
@@ -1113,7 +1118,6 @@ public class MapboxMapOptions implements Parcelable {
     result = 31 * result + (scrollGesturesEnabled ? 1 : 0);
     result = 31 * result + (tiltGesturesEnabled ? 1 : 0);
     result = 31 * result + (zoomGesturesEnabled ? 1 : 0);
-    result = 31 * result + (zoomControlsEnabled ? 1 : 0);
     result = 31 * result + (doubleTapGesturesEnabled ? 1 : 0);
     result = 31 * result + (apiBaseUrl != null ? apiBaseUrl.hashCode() : 0);
     result = 31 * result + (textureMode ? 1 : 0);

@@ -10,6 +10,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.mapbox.geojson.Feature;
@@ -29,7 +30,15 @@ import com.mapbox.mapboxsdk.utils.BitmapUtils;
 
 import java.util.List;
 
+import static com.mapbox.mapboxsdk.style.expressions.Expression.FormatOption.formatFontScale;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.FormatOption.formatTextFont;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.concat;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.format;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.formatEntry;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.get;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.literal;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.switchCase;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.toBool;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAllowOverlap;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAnchor;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconColor;
@@ -55,7 +64,11 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
   private static final String MARKER_SOURCE = "marker-source";
   private static final String MARKER_LAYER = "marker-layer";
   private static final String MARKER_ICON = "my-layers-image";
+  public static final String SELECTED_FEATURE_PROPERTY = "selected";
+  public static final String TITLE_FEATURE_PROPERTY = "title";
 
+  private GeoJsonSource geoJsonSource;
+  private FeatureCollection markerCollection;
   private MapboxMap mapboxMap;
   private MapView mapView;
   private boolean initialFont;
@@ -82,7 +95,7 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
   }
 
   @Override
-  public void onMapReady(MapboxMap mapboxMap) {
+  public void onMapReady(@NonNull MapboxMap mapboxMap) {
     this.mapboxMap = mapboxMap;
 
     // Add a sdf image for the makers
@@ -95,11 +108,11 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
     );
 
     // Add a source
-    FeatureCollection markers = FeatureCollection.fromFeatures(new Feature[] {
+    markerCollection = FeatureCollection.fromFeatures(new Feature[] {
       Feature.fromGeometry(Point.fromLngLat(4.91638, 52.35673), featureProperties("Marker 1")),
       Feature.fromGeometry(Point.fromLngLat(4.91638, 52.34673), featureProperties("Marker 2"))
     });
-    mapboxMap.addSource(new GeoJsonSource(MARKER_SOURCE, markers));
+    mapboxMap.addSource(geoJsonSource = new GeoJsonSource(MARKER_SOURCE, markerCollection));
 
     // Add the symbol-layer
     mapboxMap.addLayer(
@@ -108,9 +121,19 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
           iconImage(MARKER_ICON),
           iconIgnorePlacement(true),
           iconAllowOverlap(true),
+          iconSize(switchCase(toBool(get(SELECTED_FEATURE_PROPERTY)), literal(3.0f), literal(1.0f))),
           iconAnchor(Property.ICON_ANCHOR_BOTTOM),
           iconColor(Color.RED),
-          textField(get("title")),
+          textField(
+            format(
+              formatEntry("this is", formatFontScale(0.75)),
+              formatEntry(
+                concat(literal("\n"), get(TITLE_FEATURE_PROPERTY)),
+                formatFontScale(1.25),
+                formatTextFont(new String[] {"DIN Offc Pro Bold", "Arial Unicode MS Regular"})
+              )
+            )
+          ),
           textFont(new String[] {"DIN Offc Pro Regular", "Arial Unicode MS Regular"}),
           textColor(Color.RED),
           textAllowOverlap(true),
@@ -125,18 +148,22 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
   }
 
   @Override
-  public void onMapClick(@NonNull LatLng point) {
+  public boolean onMapClick(@NonNull LatLng point) {
     // Query which features are clicked
     PointF screenLoc = mapboxMap.getProjection().toScreenLocation(point);
     List<Feature> features = mapboxMap.queryRenderedFeatures(screenLoc, MARKER_LAYER);
-
-    SymbolLayer layer = mapboxMap.getLayerAs(MARKER_LAYER);
-    if (features.size() == 0) {
-      // Reset
-      layer.setProperties(iconSize(1f));
-    } else {
-      layer.setProperties(iconSize(3f));
+    if (!features.isEmpty()) {
+      for (Feature feature : markerCollection.features()) {
+        if (feature.getStringProperty(TITLE_FEATURE_PROPERTY)
+          .equals(features.get(0).getStringProperty(TITLE_FEATURE_PROPERTY))) {
+          boolean selected = feature.getBooleanProperty(SELECTED_FEATURE_PROPERTY);
+          feature.addBooleanProperty(SELECTED_FEATURE_PROPERTY, !selected);
+        }
+      }
+      geoJsonSource.setGeoJson(markerCollection);
     }
+
+    return false;
   }
 
   private void toggleTextSize() {
@@ -161,7 +188,8 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
 
   private JsonObject featureProperties(String title) {
     JsonObject object = new JsonObject();
-    object.add("title", new JsonPrimitive(title));
+    object.add(TITLE_FEATURE_PROPERTY, new JsonPrimitive(title));
+    object.add(SELECTED_FEATURE_PROPERTY, new JsonPrimitive(false));
     return object;
   }
 
