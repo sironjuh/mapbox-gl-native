@@ -10,9 +10,14 @@ DERIVED_DATA=build/ios
 PRODUCTS=${DERIVED_DATA}
 LOG_PATH=build/xcodebuild-$(date +"%Y-%m-%d_%H%M%S").log
 
-BUILDTYPE=${BUILDTYPE:-Debug}
 BUILD_FOR_DEVICE=${BUILD_DEVICE:-true}
+BUILD_DOCS=${BUILD_DOCS:-true}
 SYMBOLS=${SYMBOLS:-YES}
+
+BUILDTYPE=${BUILDTYPE:-Debug}
+if [[ ${SYMBOLS} == YES && ${BUILDTYPE} == Release ]]; then
+    BUILDTYPE='RelWithDebInfo'
+fi
 
 FORMAT=${FORMAT:-dynamic}
 BUILD_DYNAMIC=true
@@ -66,6 +71,13 @@ if [[ ${BUILD_STATIC} == true ]]; then
     SCHEME='static'
 fi
 
+CI_XCCONFIG=''
+if [[ ! -z "${CI:=}" ]]; then
+    xcconfig='platform/darwin/ci.xcconfig'
+    echo "CI environment, using ${xcconfig}"
+    CI_XCCONFIG="-xcconfig ./${xcconfig}"
+fi
+
 step "Building ${FORMAT} framework for iOS Simulator using ${SCHEME} scheme"
 xcodebuild \
     CURRENT_PROJECT_VERSION=${PROJ_VERSION} \
@@ -73,6 +85,7 @@ xcodebuild \
     CURRENT_SEMANTIC_VERSION=${SEM_VERSION} \
     CURRENT_COMMIT_HASH=${HASH} \
     ONLY_ACTIVE_ARCH=NO \
+    ${CI_XCCONFIG} \
     -derivedDataPath ${DERIVED_DATA} \
     -workspace ./platform/ios/ios.xcworkspace \
     -scheme ${SCHEME} \
@@ -88,6 +101,7 @@ if [[ ${BUILD_FOR_DEVICE} == true ]]; then
         CURRENT_SEMANTIC_VERSION=${SEM_VERSION} \
         CURRENT_COMMIT_HASH=${HASH} \
         ONLY_ACTIVE_ARCH=NO \
+        ${CI_XCCONFIG} \
         -derivedDataPath ${DERIVED_DATA} \
         -workspace ./platform/ios/ios.xcworkspace \
         -scheme ${SCHEME} \
@@ -167,16 +181,6 @@ else
     cp -rv platform/ios/app/Settings.bundle ${OUTPUT}
 fi
 
-if [[ ${SYMBOLS} = NO ]]; then
-    step "Stripping symbols from binaries"
-    if [[ ${BUILD_STATIC} == true ]]; then
-        strip -Sx "${OUTPUT}/static/${NAME}.framework/${NAME}"
-    fi
-    if [[ ${BUILD_DYNAMIC} == true ]]; then
-        strip -Sx "${OUTPUT}/dynamic/${NAME}.framework/${NAME}"
-    fi
-fi
-
 function get_comparable_uuid {
     echo $(dwarfdump --uuid ${1} | sed -n 's/.*UUID:\([^\"]*\) .*/\1/p' | sort)
 }
@@ -204,7 +208,7 @@ fi
 
 function create_podspec {
     step "Creating local podspec (${1})"
-    [[ $SYMBOLS = YES ]] && POD_SUFFIX="-symbols" || POD_SUFFIX=""
+    [[ $SYMBOLS = NO ]] && POD_SUFFIX="-stripped" || POD_SUFFIX=""
     POD_SOURCE_PATH='    :path => ".",'
     POD_FRAMEWORKS="  m.vendored_frameworks = '"${NAME}".framework'"
     INPUT_PODSPEC=platform/ios/${NAME}-iOS-SDK${POD_SUFFIX}.podspec
@@ -267,5 +271,7 @@ sed -i '' \
     "${README}"
 cp ${README} "${OUTPUT}"
 
-step "Generating API documentation…"
-make idocument OUTPUT="${OUTPUT}/documentation"
+if [ ${BUILD_DOCS} == true ]; then
+    step "Generating API documentation for ${BUILDTYPE} Build…"
+    make idocument OUTPUT="${OUTPUT}/documentation"
+fi

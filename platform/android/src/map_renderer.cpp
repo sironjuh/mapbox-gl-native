@@ -1,6 +1,7 @@
 #include "map_renderer.hpp"
 
 #include <mbgl/renderer/renderer.hpp>
+#include <mbgl/gfx/backend_scope.hpp>
 #include <mbgl/util/shared_thread_pool.hpp>
 #include <mbgl/util/run_loop.hpp>
 
@@ -9,20 +10,17 @@
 #include "attach_env.hpp"
 #include "android_renderer_backend.hpp"
 #include "map_renderer_runnable.hpp"
-#include "file_source.hpp"
 
 namespace mbgl {
 namespace android {
 
 MapRenderer::MapRenderer(jni::JNIEnv& _env,
                          const jni::Object<MapRenderer>& obj,
-                         const jni::Object<FileSource>& _fileSource,
                          jni::jfloat pixelRatio_,
                          const jni::String& programCacheDir_,
                          const jni::String& localIdeographFontFamily_)
         : javaPeer(_env, obj)
         , pixelRatio(pixelRatio_)
-        , fileSource(FileSource::getDefaultFileSource(_env, _fileSource))
         , programCacheDir(jni::Make<std::string>(_env, programCacheDir_))
         , localIdeographFontFamily(localIdeographFontFamily_ ? jni::Make<std::string>(_env, localIdeographFontFamily_) : optional<std::string>{})
         , threadPool(sharedThreadPool())
@@ -33,9 +31,12 @@ MapRenderer::~MapRenderer() = default;
 
 void MapRenderer::reset() {
     destroyed = true;
-    // Make sure to destroy the renderer on the GL Thread
-    auto self = ActorRef<MapRenderer>(*this, mailbox);
-    self.ask(&MapRenderer::resetRenderer).wait();
+
+    if (renderer) {
+        // Make sure to destroy the renderer on the GL Thread
+        auto self = ActorRef<MapRenderer>(*this, mailbox);
+        self.ask(&MapRenderer::resetRenderer).wait();
+    }
 
     // Lock to make sure there is no concurrent initialisation on the gl thread
     std::lock_guard<std::mutex> lock(initialisationMutex);
@@ -58,7 +59,10 @@ void MapRenderer::schedule(std::weak_ptr<Mailbox> scheduled) {
     static auto& javaClass = jni::Class<MapRenderer>::Singleton(*_env);
     static auto queueEvent = javaClass.GetMethod<void(
             jni::Object<MapRendererRunnable>)>(*_env, "queueEvent");
-    javaPeer.get(*_env).Call(*_env, queueEvent, peer);
+    auto weakReference = javaPeer.get(*_env);
+    if (weakReference) {
+        weakReference.Call(*_env, queueEvent, peer);
+    }
 
     // Release the c++ peer as it will be destroyed on GC of the Java Peer
     runnable.release();
@@ -68,7 +72,10 @@ void MapRenderer::requestRender() {
     android::UniqueEnv _env = android::AttachEnv();
     static auto& javaClass = jni::Class<MapRenderer>::Singleton(*_env);
     static auto onInvalidate = javaClass.GetMethod<void()>(*_env, "requestRender");
-    javaPeer.get(*_env).Call(*_env, onInvalidate);
+    auto weakReference = javaPeer.get(*_env);
+    if (weakReference) {
+        weakReference.Call(*_env, onInvalidate);
+    }
 }
 
 void MapRenderer::update(std::shared_ptr<UpdateParameters> params) {
@@ -107,7 +114,6 @@ void MapRenderer::requestSnapshot(SnapshotCallback callback) {
 // Called on OpenGL thread //
 
 void MapRenderer::resetRenderer() {
-    assert (renderer);
     renderer.reset();
 }
 
@@ -130,7 +136,7 @@ void MapRenderer::render(JNIEnv&) {
     }
 
     // Activate the backend
-    BackendScope backendGuard { *backend };
+    gfx::BackendScope backendGuard { *backend };
 
     // Ensure that the "current" scheduler on the render thread is
     // this scheduler.
@@ -154,6 +160,9 @@ void MapRenderer::onSurfaceCreated(JNIEnv&) {
     // Lock as the initialization can come from the main thread or the GL thread first
     std::lock_guard<std::mutex> lock(initialisationMutex);
 
+    // The GL context is already active if get a new surface.
+    gfx::BackendScope backendGuard { *backend, gfx::BackendScope::ScopeType::Implicit };
+
     // The android system will have already destroyed the underlying
     // GL resources if this is not the first initialization and an
     // attempt to clean them up will fail
@@ -166,8 +175,7 @@ void MapRenderer::onSurfaceCreated(JNIEnv&) {
 
     // Create the new backend and renderer
     backend = std::make_unique<AndroidRendererBackend>();
-    renderer = std::make_unique<Renderer>(*backend, pixelRatio, fileSource, *threadPool,
-                                          GLContextMode::Unique, programCacheDir, localIdeographFontFamily);
+    renderer = std::make_unique<Renderer>(*backend, pixelRatio, *threadPool, programCacheDir, localIdeographFontFamily);
     rendererRef = std::make_unique<ActorRef<Renderer>>(*renderer, mailbox);
 
     // Set the observer on the new Renderer implementation
@@ -176,10 +184,26 @@ void MapRenderer::onSurfaceCreated(JNIEnv&) {
     }
 }
 
-void MapRenderer::onSurfaceChanged(JNIEnv&, jint width, jint height) {
+void MapRenderer::onSurfaceChanged(JNIEnv& env, jint width, jint height) {
+    if (!renderer) {
+        // In case the surface has been destroyed (due to app back-grounding)
+        onSurfaceCreated(env);
+    }
+
     backend->resizeFramebuffer(width, height);
     framebufferSizeChanged = true;
     requestRender();
+}
+
+void MapRenderer::onRendererReset(JNIEnv&) {
+    // Make sure to destroy the renderer on the GL Thread
+    auto self = ActorRef<MapRenderer>(*this, mailbox);
+    self.ask(&MapRenderer::resetRenderer).wait();
+}
+
+// needs to be called on GL thread
+void MapRenderer::onSurfaceDestroyed(JNIEnv&) {
+    resetRenderer();
 }
 
 // Static methods //
@@ -192,13 +216,16 @@ void MapRenderer::registerNative(jni::JNIEnv& env) {
 
     // Register the peer
     jni::RegisterNativePeer<MapRenderer>(env, javaClass, "nativePtr",
-                                         jni::MakePeer<MapRenderer, const jni::Object<MapRenderer>&, const jni::Object<FileSource>&, jni::jfloat, const jni::String&, const jni::String&>,
+                                         jni::MakePeer<MapRenderer, const jni::Object<MapRenderer>&, jni::jfloat, const jni::String&, const jni::String&>,
                                          "nativeInitialize", "finalize",
                                          METHOD(&MapRenderer::render, "nativeRender"),
+                                         METHOD(&MapRenderer::onRendererReset, "nativeReset"),
                                          METHOD(&MapRenderer::onSurfaceCreated,
                                                 "nativeOnSurfaceCreated"),
                                          METHOD(&MapRenderer::onSurfaceChanged,
-                                                "nativeOnSurfaceChanged"));
+                                                "nativeOnSurfaceChanged"),
+                                         METHOD(&MapRenderer::onSurfaceDestroyed,
+                                                "nativeOnSurfaceDestroyed"));
 }
 
 MapRenderer& MapRenderer::getNativePeer(JNIEnv& env, const jni::Object<MapRenderer>& jObject) {

@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.support.annotation.ColorInt;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.annotation.Px;
 import android.support.annotation.UiThread;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.res.ResourcesCompat;
@@ -57,6 +58,8 @@ public final class UiSettings {
   private boolean scrollGesturesEnabled = true;
 
   private boolean doubleTapGesturesEnabled = true;
+
+  private boolean quickZoomGesturesEnabled = true;
 
   private boolean scaleVelocityAnimationEnabled = true;
   private boolean rotateVelocityAnimationEnabled = true;
@@ -113,6 +116,7 @@ public final class UiSettings {
     setRotateGesturesEnabled(options.getRotateGesturesEnabled());
     setTiltGesturesEnabled(options.getTiltGesturesEnabled());
     setDoubleTapGesturesEnabled(options.getDoubleTapGesturesEnabled());
+    setQuickZoomGesturesEnabled(options.getQuickZoomGesturesEnabled());
   }
 
   private void saveGestures(Bundle outState) {
@@ -126,6 +130,7 @@ public final class UiSettings {
     outState.putBoolean(MapboxConstants.STATE_FLING_ANIMATION_ENABLED, isFlingVelocityAnimationEnabled());
     outState.putBoolean(MapboxConstants.STATE_INCREASE_ROTATE_THRESHOLD, isIncreaseRotateThresholdWhenScaling());
     outState.putBoolean(MapboxConstants.STATE_INCREASE_SCALE_THRESHOLD, isIncreaseScaleThresholdWhenRotating());
+    outState.putBoolean(MapboxConstants.STATE_QUICK_ZOOM_ENABLED, isQuickZoomGesturesEnabled());
   }
 
   private void restoreGestures(Bundle savedInstanceState) {
@@ -141,6 +146,7 @@ public final class UiSettings {
       savedInstanceState.getBoolean(MapboxConstants.STATE_INCREASE_ROTATE_THRESHOLD));
     setIncreaseScaleThresholdWhenRotating(
       savedInstanceState.getBoolean(MapboxConstants.STATE_INCREASE_SCALE_THRESHOLD));
+    setQuickZoomGesturesEnabled(savedInstanceState.getBoolean(MapboxConstants.STATE_QUICK_ZOOM_ENABLED));
   }
 
   private void initialiseCompass(MapboxMapOptions options, @NonNull Resources resources) {
@@ -339,7 +345,7 @@ public final class UiSettings {
   }
 
   /**
-   * Sets the margins of the compass view. Use this to change the distance of the compass from the
+   * Sets the margins of the compass view in pixels. Use this to change the distance of the compass from the
    * map view edge.
    *
    * @param left   The left margin in pixels.
@@ -348,42 +354,46 @@ public final class UiSettings {
    * @param bottom The bottom margin in pixels.
    */
   @UiThread
-  public void setCompassMargins(int left, int top, int right, int bottom) {
+  public void setCompassMargins(@Px int left, @Px int top, @Px int right, @Px int bottom) {
     setWidgetMargins(compassView, compassMargins, left, top, right, bottom);
   }
 
   /**
-   * Returns the left side margin of CompassView
+   * Returns the left side margin of CompassView in pixels.
    *
    * @return The left margin in pixels
    */
+  @Px
   public int getCompassMarginLeft() {
     return compassMargins[0];
   }
 
   /**
-   * Returns the top side margin of CompassView
+   * Returns the top side margin of CompassView in pixels.
    *
    * @return The top margin in pixels
    */
+  @Px
   public int getCompassMarginTop() {
     return compassMargins[1];
   }
 
   /**
-   * Returns the right side margin of CompassView
+   * Returns the right side margin of CompassView in pixels.
    *
    * @return The right margin in pixels
    */
+  @Px
   public int getCompassMarginRight() {
     return compassMargins[2];
   }
 
   /**
-   * Returns the bottom side margin of CompassView
+   * Returns the bottom side margin of CompassView in pixels.
    *
    * @return The bottom margin in pixels
    */
+  @Px
   public int getCompassMarginBottom() {
     return compassMargins[3];
   }
@@ -451,7 +461,7 @@ public final class UiSettings {
   }
 
   /**
-   * Sets the margins of the logo view. Use this to change the distance of the Mapbox logo from the
+   * Sets the margins of the logo view in pixels. Use this to change the distance of the Mapbox logo from the
    * map view edge.
    *
    * @param left   The left margin in pixels.
@@ -459,42 +469,46 @@ public final class UiSettings {
    * @param right  The right margin in pixels.
    * @param bottom The bottom margin in pixels.
    */
-  public void setLogoMargins(int left, int top, int right, int bottom) {
+  public void setLogoMargins(@Px int left, @Px int top, @Px int right, @Px int bottom) {
     setWidgetMargins(logoView, logoMargins, left, top, right, bottom);
   }
 
   /**
-   * Returns the left side margin of the logo
+   * Returns the left side margin of the logo in pixels.
    *
    * @return The left margin in pixels
    */
+  @Px
   public int getLogoMarginLeft() {
     return logoMargins[0];
   }
 
   /**
-   * Returns the top side margin of the logo
+   * Returns the top side margin of the logo in pixels.
    *
    * @return The top margin in pixels
    */
+  @Px
   public int getLogoMarginTop() {
     return logoMargins[1];
   }
 
   /**
-   * Returns the right side margin of the logo
+   * Returns the right side margin of the logo in pixels.
    *
    * @return The right margin in pixels
    */
+  @Px
   public int getLogoMarginRight() {
     return logoMargins[2];
   }
 
   /**
-   * Returns the bottom side margin of the logo
+   * Returns the bottom side margin of the logo in pixels.
    *
    * @return The bottom margin in pixels
    */
+  @Px
   public int getLogoMarginBottom() {
     return logoMargins[3];
   }
@@ -538,7 +552,7 @@ public final class UiSettings {
    *
    * @return the active manager class used for showing attribution
    */
-  @NonNull
+  @Nullable
   public AttributionDialogManager getAttributionDialogManager() {
     return attributionDialogManager;
   }
@@ -565,14 +579,14 @@ public final class UiSettings {
   }
 
   /**
-   * Sets the margins of the attribution view.
+   * Sets the margins of the attribution view in pixels.
    *
    * @param left   The left margin in pixels.
    * @param top    The top margin in pixels.
    * @param right  The right margin in pixels.
    * @param bottom The bottom margin in pixels.
    */
-  public void setAttributionMargins(int left, int top, int right, int bottom) {
+  public void setAttributionMargins(@Px int left, @Px int top, @Px int right, @Px int bottom) {
     setWidgetMargins(attributionsView, attributionsMargins, left, top, right, bottom);
   }
 
@@ -594,37 +608,41 @@ public final class UiSettings {
   }
 
   /**
-   * Returns the left side margin of the attribution view.
+   * Returns the left side margin of the attribution view in pixels.
    *
    * @return The left margin in pixels
    */
+  @Px
   public int getAttributionMarginLeft() {
     return attributionsMargins[0];
   }
 
   /**
-   * Returns the top side margin of the attribution view.
+   * Returns the top side margin of the attribution view in pixels.
    *
    * @return The top margin in pixels
    */
+  @Px
   public int getAttributionMarginTop() {
     return attributionsMargins[1];
   }
 
   /**
-   * Returns the right side margin of the attribution view.
+   * Returns the right side margin of the attribution view in pixels.
    *
    * @return The right margin in pixels
    */
+  @Px
   public int getAttributionMarginRight() {
     return attributionsMargins[2];
   }
 
   /**
-   * Returns the bottom side margin of the logo
+   * Returns the bottom side margin of the logo in pixels.
    *
    * @return The bottom margin in pixels
    */
+  @Px
   public int getAttributionMarginBottom() {
     return attributionsMargins[3];
   }
@@ -728,6 +746,29 @@ public final class UiSettings {
    */
   public boolean isDoubleTapGesturesEnabled() {
     return doubleTapGesturesEnabled;
+  }
+
+  /**
+   * Returns whether the user may zoom the map by tapping twice, holding and moving the pointer up and down.
+   *
+   * @return If true, zooming by tapping twice and holding is enabled.
+   */
+  public boolean isQuickZoomGesturesEnabled() {
+    return quickZoomGesturesEnabled;
+  }
+
+  /**
+   * Changes whether the user may zoom the map by tapping twice, holding and moving the pointer up and down.
+   * <p>
+   * This setting controls only user interactions with the map. If you set the value to false,
+   * you may still change the map location programmatically.
+   * </p>
+   * The default value is true.
+   *
+   * @param quickZoomGesturesEnabled If true, zooming by tapping twice and holding is enabled.
+   */
+  public void setQuickZoomGesturesEnabled(boolean quickZoomGesturesEnabled) {
+    this.quickZoomGesturesEnabled = quickZoomGesturesEnabled;
   }
 
   private void restoreDeselectMarkersOnTap(Bundle savedInstanceState) {
@@ -899,6 +940,8 @@ public final class UiSettings {
    * @see #setScrollGesturesEnabled(boolean)
    * @see #setRotateGesturesEnabled(boolean)
    * @see #setTiltGesturesEnabled(boolean)
+   * @see #setDoubleTapGesturesEnabled(boolean)
+   * @see #setQuickZoomGesturesEnabled(boolean)
    */
   public void setAllGesturesEnabled(boolean enabled) {
     setScrollGesturesEnabled(enabled);
@@ -906,6 +949,19 @@ public final class UiSettings {
     setTiltGesturesEnabled(enabled);
     setZoomGesturesEnabled(enabled);
     setDoubleTapGesturesEnabled(enabled);
+    setQuickZoomGesturesEnabled(enabled);
+  }
+
+  /**
+   * <p>
+   * Retrieves the current status of whether all gestures are enabled.
+   * </p>
+   *
+   * @return If true, all gestures are enabled.
+   */
+  public boolean areAllGesturesEnabled() {
+    return rotateGesturesEnabled && tiltGesturesEnabled && zoomGesturesEnabled
+        && scrollGesturesEnabled && doubleTapGesturesEnabled && quickZoomGesturesEnabled;
   }
 
   private void saveFocalPoint(Bundle outState) {

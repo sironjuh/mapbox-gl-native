@@ -2,6 +2,8 @@ package com.mapbox.mapboxsdk.http;
 
 import android.support.annotation.NonNull;
 
+import com.mapbox.mapboxsdk.Mapbox;
+
 public class HttpRequestUrl {
 
   private HttpRequestUrl() {
@@ -22,7 +24,11 @@ public class HttpRequestUrl {
       } else {
         resourceUrl = resourceUrl + "&";
       }
-      resourceUrl = resourceUrl + "events=true";
+      if (Mapbox.getSkuToken() != null) {
+        resourceUrl = resourceUrl + "events=true&sku=" + Mapbox.getSkuToken();
+      } else {
+        resourceUrl = resourceUrl + "events=true";
+      }
     }
     return resourceUrl;
   }

@@ -1,23 +1,23 @@
 #include <mbgl/renderer/buckets/raster_bucket.hpp>
 #include <mbgl/renderer/layers/render_raster_layer.hpp>
 #include <mbgl/programs/raster_program.hpp>
-#include <mbgl/gl/context.hpp>
+#include <mbgl/gfx/context.hpp>
 
 namespace mbgl {
 
 using namespace style;
 
 RasterBucket::RasterBucket(PremultipliedImage&& image_)
-    : Bucket(LayerType::Raster),
-      image(std::make_shared<PremultipliedImage>(std::move(image_))) {
+    : image(std::make_shared<PremultipliedImage>(std::move(image_))) {
 }
 
 RasterBucket::RasterBucket(std::shared_ptr<PremultipliedImage> image_)
-    : Bucket(LayerType::Raster),
-      image(image_) {
+    : image(std::move(image_)) {
 }
 
-void RasterBucket::upload(gl::Context& context) {
+RasterBucket::~RasterBucket() = default;
+
+void RasterBucket::upload(gfx::Context& context) {
     if (!hasData()) {
         return;
     }
@@ -79,7 +79,7 @@ void RasterBucket::setMask(TileMask&& mask_) {
 
         if (segments.back().vertexLength + vertexLength > std::numeric_limits<uint16_t>::max()) {
             // Move to a new segments because the old one can't hold the geometry.
-            segments.emplace_back(vertices.vertexSize(), indices.indexSize());
+            segments.emplace_back(vertices.elements(), indices.elements());
         }
 
         vertices.emplace_back(
@@ -108,5 +108,10 @@ void RasterBucket::setMask(TileMask&& mask_) {
 bool RasterBucket::hasData() const {
     return !!image;
 }
+
+bool RasterBucket::supportsLayer(const style::Layer::Impl& impl) const {
+    return style::RasterLayer::Impl::staticTypeInfo() == impl.getTypeInfo();
+}
+
 
 } // namespace mbgl

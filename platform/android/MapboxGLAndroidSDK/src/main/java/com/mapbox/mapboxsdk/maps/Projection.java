@@ -3,7 +3,6 @@ package com.mapbox.mapboxsdk.maps;
 import android.graphics.PointF;
 import android.support.annotation.FloatRange;
 import android.support.annotation.NonNull;
-
 import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.constants.GeometryConstants;
 import com.mapbox.mapboxsdk.geometry.LatLng;
@@ -22,17 +21,23 @@ import java.util.List;
 public class Projection {
 
   @NonNull
-  private final NativeMapView nativeMapView;
-  private int[] contentPadding;
+  private final NativeMap nativeMapView;
+  @NonNull
+  private final MapView mapView;
+  private int[] contentPadding = new int[] {0, 0, 0, 0};
 
-  Projection(@NonNull NativeMapView nativeMapView) {
+  Projection(@NonNull NativeMap nativeMapView, @NonNull MapView mapView) {
     this.nativeMapView = nativeMapView;
-    this.contentPadding = new int[] {0, 0, 0, 0};
+    this.mapView = mapView;
   }
 
   void setContentPadding(int[] contentPadding) {
     this.contentPadding = contentPadding;
-    nativeMapView.setContentPadding(contentPadding);
+    float[] output = new float[contentPadding.length];
+    for (int i = 0; i < contentPadding.length; i++) {
+      output[i] = contentPadding[i];
+    }
+    nativeMapView.setContentPadding(output);
   }
 
   int[] getContentPadding() {
@@ -117,14 +122,14 @@ public class Projection {
 
     if (ignorePadding) {
       left = 0;
-      right = nativeMapView.getWidth();
+      right = mapView.getWidth();
       top = 0;
-      bottom = nativeMapView.getHeight();
+      bottom = mapView.getHeight();
     } else {
-      left = contentPadding[0];
-      right = nativeMapView.getWidth() - contentPadding[2];
-      top = contentPadding[1];
-      bottom = nativeMapView.getHeight() - contentPadding[3];
+      left = (float) contentPadding[0];
+      right = (float) (mapView.getWidth() - contentPadding[2]);
+      top = (float) contentPadding[1];
+      bottom = (float) (mapView.getHeight() - contentPadding[3]);
     }
 
     LatLng center = fromScreenLocation(new PointF(left + (right - left) / 2, top + (bottom - top) / 2));
@@ -173,6 +178,10 @@ public class Projection {
       }
     }
 
+    if (east < west) {
+      return new VisibleRegion(topLeft, topRight, bottomLeft, bottomRight,
+        LatLngBounds.from(north, east + GeometryConstants.LONGITUDE_SPAN, south, west));
+    }
     return new VisibleRegion(topLeft, topRight, bottomLeft, bottomRight,
       LatLngBounds.from(north, east, south, west));
   }
@@ -251,11 +260,11 @@ public class Projection {
   }
 
   float getHeight() {
-    return nativeMapView.getHeight();
+    return mapView.getHeight();
   }
 
   float getWidth() {
-    return nativeMapView.getWidth();
+    return mapView.getWidth();
   }
 
   /**

@@ -10,6 +10,7 @@
 #import "MGLLoggingConfiguration_Private.h"
 #import "MGLSymbolStyleLayer_Private.h"
 
+#include <mbgl/style/layers/symbol_layer.hpp>
 #include <mbgl/style/transition_options.hpp>
 
 
@@ -53,6 +54,7 @@ namespace mbgl {
     });
 
     MBGL_DEFINE_ENUM(MGLSymbolZOrder, {
+        { MGLSymbolZOrderAuto, "auto" },
         { MGLSymbolZOrderViewportY, "viewport-y" },
         { MGLSymbolZOrderSource, "source" },
     });
@@ -70,6 +72,7 @@ namespace mbgl {
     });
 
     MBGL_DEFINE_ENUM(MGLTextJustification, {
+        { MGLTextJustificationAuto, "auto" },
         { MGLTextJustificationLeft, "left" },
         { MGLTextJustificationCenter, "center" },
         { MGLTextJustificationRight, "right" },
@@ -585,6 +588,24 @@ namespace mbgl {
     return MGLStyleValueTransformer<mbgl::style::SymbolPlacementType, NSValue *, mbgl::style::SymbolPlacementType, MGLSymbolPlacement>().toExpression(propertyValue);
 }
 
+- (void)setSymbolSortKey:(NSExpression *)symbolSortKey {
+    MGLAssertStyleLayerIsValid();
+    MGLLogDebug(@"Setting symbolSortKey: %@", symbolSortKey);
+
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(symbolSortKey, true);
+    self.rawLayer->setSymbolSortKey(mbglValue);
+}
+
+- (NSExpression *)symbolSortKey {
+    MGLAssertStyleLayerIsValid();
+
+    auto propertyValue = self.rawLayer->getSymbolSortKey();
+    if (propertyValue.isUndefined()) {
+        propertyValue = self.rawLayer->getDefaultSymbolSortKey();
+    }
+    return MGLStyleValueTransformer<float, NSNumber *>().toExpression(propertyValue);
+}
+
 - (void)setSymbolSpacing:(NSExpression *)symbolSpacing {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting symbolSpacing: %@", symbolSpacing);
@@ -905,6 +926,24 @@ namespace mbgl {
     return MGLStyleValueTransformer<mbgl::style::AlignmentType, NSValue *, mbgl::style::AlignmentType, MGLTextPitchAlignment>().toExpression(propertyValue);
 }
 
+- (void)setTextRadialOffset:(NSExpression *)textRadialOffset {
+    MGLAssertStyleLayerIsValid();
+    MGLLogDebug(@"Setting textRadialOffset: %@", textRadialOffset);
+
+    auto mbglValue = MGLStyleValueTransformer<float, NSNumber *>().toPropertyValue<mbgl::style::PropertyValue<float>>(textRadialOffset, true);
+    self.rawLayer->setTextRadialOffset(mbglValue);
+}
+
+- (NSExpression *)textRadialOffset {
+    MGLAssertStyleLayerIsValid();
+
+    auto propertyValue = self.rawLayer->getTextRadialOffset();
+    if (propertyValue.isUndefined()) {
+        propertyValue = self.rawLayer->getDefaultTextRadialOffset();
+    }
+    return MGLStyleValueTransformer<float, NSNumber *>().toExpression(propertyValue);
+}
+
 - (void)setTextRotation:(NSExpression *)textRotation {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textRotation: %@", textRotation);
@@ -966,6 +1005,24 @@ namespace mbgl {
     return MGLStyleValueTransformer<mbgl::style::TextTransformType, NSValue *, mbgl::style::TextTransformType, MGLTextTransform>().toExpression(propertyValue);
 }
 
+- (void)setTextVariableAnchor:(NSExpression *)textVariableAnchor {
+    MGLAssertStyleLayerIsValid();
+    MGLLogDebug(@"Setting textVariableAnchor: %@", textVariableAnchor);
+
+    auto mbglValue = MGLStyleValueTransformer<std::vector<mbgl::style::SymbolAnchorType>, NSArray<NSValue *> *, mbgl::style::SymbolAnchorType, MGLTextAnchor>().toPropertyValue<mbgl::style::PropertyValue<std::vector<mbgl::style::SymbolAnchorType>>>(textVariableAnchor, false);
+    self.rawLayer->setTextVariableAnchor(mbglValue);
+}
+
+- (NSExpression *)textVariableAnchor {
+    MGLAssertStyleLayerIsValid();
+
+    auto propertyValue = self.rawLayer->getTextVariableAnchor();
+    if (propertyValue.isUndefined()) {
+        propertyValue = self.rawLayer->getDefaultTextVariableAnchor();
+    }
+    return MGLStyleValueTransformer<std::vector<mbgl::style::SymbolAnchorType>, NSArray<NSValue *> *, mbgl::style::SymbolAnchorType, MGLTextAnchor>().toExpression(propertyValue);
+}
+
 #pragma mark - Accessing the Paint Attributes
 
 - (void)setIconColor:(NSExpression *)iconColor {
@@ -990,19 +1047,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconColorTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconColorTransition(options);
+    self.rawLayer->setIconColorTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconColorTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconColorTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconHaloBlur:(NSExpression *)iconHaloBlur {
@@ -1027,19 +1080,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconHaloBlurTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconHaloBlurTransition(options);
+    self.rawLayer->setIconHaloBlurTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconHaloBlurTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconHaloBlurTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconHaloColor:(NSExpression *)iconHaloColor {
@@ -1064,19 +1113,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconHaloColorTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconHaloColorTransition(options);
+    self.rawLayer->setIconHaloColorTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconHaloColorTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconHaloColorTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconHaloWidth:(NSExpression *)iconHaloWidth {
@@ -1101,19 +1146,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconHaloWidthTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconHaloWidthTransition(options);
+    self.rawLayer->setIconHaloWidthTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconHaloWidthTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconHaloWidthTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconOpacity:(NSExpression *)iconOpacity {
@@ -1138,19 +1179,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconOpacityTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconOpacityTransition(options);
+    self.rawLayer->setIconOpacityTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconOpacityTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconOpacityTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconTranslation:(NSExpression *)iconTranslation {
@@ -1175,19 +1212,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting iconTranslationTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setIconTranslateTransition(options);
+    self.rawLayer->setIconTranslateTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)iconTranslationTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getIconTranslateTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setIconTranslate:(NSExpression *)iconTranslate {
@@ -1244,19 +1277,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textColorTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextColorTransition(options);
+    self.rawLayer->setTextColorTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textColorTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextColorTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextHaloBlur:(NSExpression *)textHaloBlur {
@@ -1281,19 +1310,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textHaloBlurTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextHaloBlurTransition(options);
+    self.rawLayer->setTextHaloBlurTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textHaloBlurTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextHaloBlurTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextHaloColor:(NSExpression *)textHaloColor {
@@ -1318,19 +1343,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textHaloColorTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextHaloColorTransition(options);
+    self.rawLayer->setTextHaloColorTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textHaloColorTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextHaloColorTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextHaloWidth:(NSExpression *)textHaloWidth {
@@ -1355,19 +1376,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textHaloWidthTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextHaloWidthTransition(options);
+    self.rawLayer->setTextHaloWidthTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textHaloWidthTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextHaloWidthTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextOpacity:(NSExpression *)textOpacity {
@@ -1392,19 +1409,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textOpacityTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextOpacityTransition(options);
+    self.rawLayer->setTextOpacityTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textOpacityTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextOpacityTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextTranslation:(NSExpression *)textTranslation {
@@ -1429,19 +1442,15 @@ namespace mbgl {
     MGLAssertStyleLayerIsValid();
     MGLLogDebug(@"Setting textTranslationTransition: %@", MGLStringFromMGLTransition(transition));
 
-    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
-    self.rawLayer->setTextTranslateTransition(options);
+    self.rawLayer->setTextTranslateTransition(MGLOptionsFromTransition(transition));
 }
 
 - (MGLTransition)textTranslationTransition {
     MGLAssertStyleLayerIsValid();
 
     mbgl::style::TransitionOptions transitionOptions = self.rawLayer->getTextTranslateTransition();
-    MGLTransition transition;
-    transition.duration = MGLTimeIntervalFromDuration(transitionOptions.duration.value_or(mbgl::Duration::zero()));
-    transition.delay = MGLTimeIntervalFromDuration(transitionOptions.delay.value_or(mbgl::Duration::zero()));
 
-    return transition;
+    return MGLTransitionFromOptions(transitionOptions);
 }
 
 - (void)setTextTranslate:(NSExpression *)textTranslate {

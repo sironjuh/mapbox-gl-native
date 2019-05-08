@@ -4,12 +4,12 @@
 #include <mbgl/annotation/symbol_annotation_impl.hpp>
 #include <mbgl/annotation/line_annotation_impl.hpp>
 #include <mbgl/annotation/fill_annotation_impl.hpp>
+#include <mbgl/layermanager/layer_manager.hpp>
 #include <mbgl/style/style.hpp>
 #include <mbgl/style/style_impl.hpp>
 #include <mbgl/style/layers/symbol_layer.hpp>
 #include <mbgl/style/layers/symbol_layer_impl.hpp>
 #include <mbgl/style/expression/dsl.hpp>
-#include <mbgl/storage/file_source.hpp>
 
 #include <boost/function_output_iterator.hpp>
 

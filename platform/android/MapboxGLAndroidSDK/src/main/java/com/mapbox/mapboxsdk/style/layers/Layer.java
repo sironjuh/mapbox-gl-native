@@ -2,10 +2,11 @@ package com.mapbox.mapboxsdk.style.layers;
 
 import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
-
 import android.support.annotation.Nullable;
 import com.google.gson.JsonElement;
+import com.mapbox.mapboxsdk.LibraryLoader;
 import com.mapbox.mapboxsdk.style.expressions.Expression;
+import com.mapbox.mapboxsdk.style.types.Formatted;
 import com.mapbox.mapboxsdk.utils.ThreadUtils;
 
 /**
@@ -13,10 +14,17 @@ import com.mapbox.mapboxsdk.utils.ThreadUtils;
  */
 public abstract class Layer {
 
+  private final static String TAG = "Mbgl-Layer";
+
   @Keep
   private long nativePtr;
   @Keep
   private boolean invalidated;
+  private boolean detached;
+
+  static {
+    LibraryLoader.load();
+  }
 
   @Keep
   protected Layer(long nativePtr) {
@@ -32,10 +40,14 @@ public abstract class Layer {
    * Validates if layer interaction is happening on the UI thread
    */
   protected void checkThread() {
-    ThreadUtils.checkThread("Layer");
+    ThreadUtils.checkThread(TAG);
   }
 
   public void setProperties(@NonNull PropertyValue<?>... properties) {
+    if (detached) {
+      return;
+    }
+
     checkThread();
     if (properties.length == 0) {
       return;
@@ -137,9 +149,20 @@ public abstract class Layer {
 
   @Nullable
   private Object convertValue(@Nullable Object value) {
-    if (value != null && value instanceof Expression) {
+    if (value instanceof Expression) {
       return ((Expression) value).toArray();
+    } else if (value instanceof Formatted) {
+      return ((Formatted) value).toArray();
+    } else {
+      return value;
     }
-    return value;
+  }
+
+  public void setDetached() {
+    detached = true;
+  }
+
+  public boolean isDetached() {
+    return detached;
   }
 }

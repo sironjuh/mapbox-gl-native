@@ -3,8 +3,8 @@ package com.mapbox.mapboxsdk.maps.renderer;
 import android.content.Context;
 import android.support.annotation.CallSuper;
 import android.support.annotation.Keep;
-
 import android.support.annotation.NonNull;
+import com.mapbox.mapboxsdk.LibraryLoader;
 import com.mapbox.mapboxsdk.log.Logger;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
 import com.mapbox.mapboxsdk.storage.FileSource;
@@ -22,20 +22,24 @@ import javax.microedition.khronos.opengles.GL10;
 @Keep
 public abstract class MapRenderer implements MapRendererScheduler {
 
+  static {
+    LibraryLoader.load();
+  }
+
   private static final String TAG = "Mbgl-MapRenderer";
 
   // Holds the pointer to the native peer after initialisation
   private long nativePtr = 0;
-
+  private double expectedRenderTime = 0;
   private MapboxMap.OnFpsChangedListener onFpsChangedListener;
+  protected boolean hasSurface;
 
   public MapRenderer(@NonNull Context context, String localIdeographFontFamily) {
-    FileSource fileSource = FileSource.getInstance(context);
     float pixelRatio = context.getResources().getDisplayMetrics().density;
     String programCacheDir = FileSource.getInternalCachePath(context);
 
     // Initialise native peer
-    nativeInitialize(this, fileSource, pixelRatio, programCacheDir, localIdeographFontFamily);
+    nativeInitialize(this, pixelRatio, programCacheDir, localIdeographFontFamily);
   }
 
   public void onStart() {
@@ -74,11 +78,25 @@ public abstract class MapRenderer implements MapRendererScheduler {
   }
 
   @CallSuper
+  protected void onSurfaceDestroyed() {
+    nativeOnSurfaceDestroyed();
+  }
+
+  @CallSuper
   protected void onDrawFrame(GL10 gl) {
+    long startTime = System.nanoTime();
     try {
       nativeRender();
     } catch (java.lang.Error error) {
       Logger.e(TAG, error.getMessage());
+    }
+    long renderTime = System.nanoTime() - startTime;
+    if (renderTime < expectedRenderTime) {
+      try {
+        Thread.sleep((long) ((expectedRenderTime - renderTime) / 1E6));
+      } catch (InterruptedException ex) {
+        Logger.e(TAG, ex.getMessage());
+      }
     }
     if (onFpsChangedListener != null) {
       updateFps();
@@ -100,7 +118,6 @@ public abstract class MapRenderer implements MapRendererScheduler {
   }
 
   private native void nativeInitialize(MapRenderer self,
-                                       FileSource fileSource,
                                        float pixelRatio,
                                        String programCacheDir,
                                        String localIdeographFontFamily);
@@ -113,20 +130,41 @@ public abstract class MapRenderer implements MapRendererScheduler {
 
   private native void nativeOnSurfaceChanged(int width, int height);
 
+  private native void nativeOnSurfaceDestroyed();
+
+  protected native void nativeReset();
+
   private native void nativeRender();
 
-  private long frames;
   private long timeElapsed;
 
   private void updateFps() {
-    frames++;
     long currentTime = System.nanoTime();
-    double fps = 0;
-    if (currentTime - timeElapsed >= 1) {
-      fps = frames / ((currentTime - timeElapsed) / 1E9);
-      onFpsChangedListener.onFpsChanged(fps);
-      timeElapsed = currentTime;
-      frames = 0;
+    double fps = 1E9 / ((currentTime - timeElapsed));
+    onFpsChangedListener.onFpsChanged(fps);
+    timeElapsed = currentTime;
+  }
+
+  /**
+   * The max frame rate at which this render is rendered,
+   * but it can't excess the ability of device hardware.
+   *
+   * @param maximumFps Can be set to arbitrary integer values.
+   */
+  public void setMaximumFps(int maximumFps) {
+    if (maximumFps <= 0) {
+      // Not valid, just return
+      return;
     }
+    expectedRenderTime = 1E9 / maximumFps;
+  }
+
+  /**
+   * Returns true if renderer has a surface to draw on.
+   *
+   * @return returns if renderer has a surface, false otherwise
+   */
+  public boolean hasSurface() {
+    return hasSurface;
   }
 }

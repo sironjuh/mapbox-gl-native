@@ -3,10 +3,10 @@
 #include <mbgl/actor/scheduler.hpp>
 #include <mbgl/renderer/renderer.hpp>
 #include <mbgl/renderer/renderer_observer.hpp>
-#include <mbgl/storage/file_source.hpp>
 #include <mbgl/util/async_task.hpp>
 #include <mbgl/util/thread.hpp>
 #include <mbgl/util/run_loop.hpp>
+#include <mbgl/util/geojson.hpp>
 
 #include "android_renderer_backend.hpp"
 
@@ -48,6 +48,10 @@ public:
 
     void onDidFinishRenderingMap() override {
         delegate.invoke(&RendererObserver::onDidFinishRenderingMap);
+    }
+
+    void onStyleImageMissing(const std::string& id, StyleImageMissingCallback done) override {
+        delegate.invoke(&RendererObserver::onStyleImageMissing, id, done);
     }
 
 private:
@@ -120,6 +124,14 @@ AnnotationIDs AndroidRendererFrontend::queryPointAnnotations(const ScreenBox& bo
 AnnotationIDs AndroidRendererFrontend::queryShapeAnnotations(const ScreenBox& box) const {
     // Waits for the result from the orchestration thread and returns
     return mapRenderer.actor().ask(&Renderer::queryShapeAnnotations, box).get();
+}
+
+FeatureExtensionValue AndroidRendererFrontend::queryFeatureExtensions(const std::string& sourceID,
+                                                     const Feature& feature,
+                                                     const std::string& extension,
+                                                     const std::string& extensionField,
+                                                     const optional<std::map<std::string, mbgl::Value>>& args) const {
+    return mapRenderer.actor().ask(&Renderer::queryFeatureExtensions, sourceID, feature, extension, extensionField, args).get();
 }
 
 } // namespace android

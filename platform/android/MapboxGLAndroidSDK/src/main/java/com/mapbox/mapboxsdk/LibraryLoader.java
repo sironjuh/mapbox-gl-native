@@ -13,14 +13,13 @@ public abstract class LibraryLoader {
 
   private static final String TAG = "Mbgl-LibraryLoader";
 
-  private static final LibraryLoader DEFAULT = new LibraryLoader() {
-    @Override
-    public void load(String name) {
-      System.loadLibrary(name);
-    }
-  };
+  private static final LibraryLoader DEFAULT = Mapbox.getModuleProvider()
+    .createLibraryLoaderProvider()
+    .getDefaultLibraryLoader();
 
   private static volatile LibraryLoader loader = DEFAULT;
+
+  private static boolean loaded;
 
   /**
    * Set the library loader that loads the shared library.
@@ -39,8 +38,12 @@ public abstract class LibraryLoader {
    */
   public static void load() {
     try {
-      loader.load("mapbox-gl");
+      if (!loaded) {
+        loaded = true;
+        loader.load("mapbox-gl");
+      }
     } catch (UnsatisfiedLinkError error) {
+      loaded = false;
       String message = "Failed to load native shared library.";
       Logger.e(TAG, message, error);
       MapStrictMode.strictModeViolation(message, error);

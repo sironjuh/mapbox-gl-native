@@ -14,23 +14,26 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import com.mapbox.geojson.Feature;
 import com.mapbox.geojson.FeatureCollection;
 import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
 import com.mapbox.mapboxsdk.maps.OnMapReadyCallback;
+import com.mapbox.mapboxsdk.maps.Style;
 import com.mapbox.mapboxsdk.style.expressions.Expression;
 import com.mapbox.mapboxsdk.style.layers.SymbolLayer;
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource;
 import com.mapbox.mapboxsdk.style.sources.Source;
 import com.mapbox.mapboxsdk.testapp.R;
 import com.mapbox.mapboxsdk.testapp.utils.ResourceUtils;
-import timber.log.Timber;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.List;
+
+import timber.log.Timber;
 
 import static com.mapbox.mapboxsdk.style.expressions.Expression.concat;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.division;
@@ -54,6 +57,7 @@ import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAllowOverlap
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAnchor;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconImage;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconOffset;
+import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconOpacity;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconSize;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.textAnchor;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.textColor;
@@ -89,8 +93,10 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
   @Override
   public void onMapReady(@NonNull final MapboxMap map) {
     mapboxMap = map;
-    addSymbolClickListener();
-    new LoadDataTask(this).execute();
+    map.setStyle(Style.OUTDOORS, style -> {
+      addSymbolClickListener();
+      new LoadDataTask(SymbolGeneratorActivity.this).execute();
+    });
   }
 
   private void addSymbolClickListener() {
@@ -99,6 +105,12 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
       List<Feature> features = mapboxMap.queryRenderedFeatures(screenPoint, LAYER_ID);
       if (!features.isEmpty()) {
         Feature feature = features.get(0);
+        // validate symbol flicker regression for #13407
+        SymbolLayer layer = mapboxMap.getStyle().getLayerAs(LAYER_ID);
+        layer.setProperties(iconOpacity(match(
+          get(FEATURE_ID), literal(1.0f),
+          stop(feature.getStringProperty(FEATURE_ID), 0.3f)
+        )));
         Timber.v("Feature was clicked with data: %s", feature.toJson());
         Toast.makeText(
           SymbolGeneratorActivity.this,
@@ -119,11 +131,11 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
     if (item.getItemId() == R.id.menu_action_icon_overlap) {
-      SymbolLayer layer = mapboxMap.getLayerAs(LAYER_ID);
+      SymbolLayer layer = mapboxMap.getStyle().getLayerAs(LAYER_ID);
       layer.setProperties(iconAllowOverlap(!layer.getIconAllowOverlap().getValue()));
       return true;
     } else if (item.getItemId() == R.id.menu_action_filter) {
-      SymbolLayer layer = mapboxMap.getLayerAs(LAYER_ID);
+      SymbolLayer layer = mapboxMap.getStyle().getLayerAs(LAYER_ID);
       layer.setFilter(eq(get(FEATURE_RANK), literal(1)));
       Timber.e("Filter that was set: %s", layer.getFilter());
       return true;
@@ -286,10 +298,10 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
 
     // add a geojson source to the map
     Source source = new GeoJsonSource(SOURCE_ID, featureCollection);
-    mapboxMap.addSource(source);
+    mapboxMap.getStyle().addSource(source);
 
     // add symbol layer
-    mapboxMap.addLayer(symbolLayer);
+    mapboxMap.getStyle().addLayer(symbolLayer);
 
     // get expressions
     Expression iconImageExpressionResult = symbolLayer.getIconImage().getExpression();
@@ -350,7 +362,7 @@ public class SymbolGeneratorActivity extends AppCompatActivity implements OnMapR
     @Override
     protected void onPostExecute(HashMap<String, Bitmap> bitmapHashMap) {
       super.onPostExecute(bitmapHashMap);
-      mapboxMap.addImages(bitmapHashMap);
+      mapboxMap.getStyle().addImagesAsync(bitmapHashMap);
     }
   }
 }

@@ -105,7 +105,7 @@ void Style::Impl::parse(const std::string& json_) {
     name = parser.name;
     defaultCamera.center = parser.latLng;
     defaultCamera.zoom = parser.zoom;
-    defaultCamera.angle = parser.bearing;
+    defaultCamera.bearing = parser.bearing;
     defaultCamera.pitch = parser.pitch;
 
     setLight(std::make_unique<Light>(parser.light));
@@ -254,6 +254,7 @@ bool Style::Impl::isLoaded() const {
 void Style::Impl::addImage(std::unique_ptr<style::Image> image) {
     images.remove(image->getID()); // We permit using addImage to update.
     images.add(std::move(image));
+    observer->onUpdate();
 }
 
 void Style::Impl::removeImage(const std::string& id) {

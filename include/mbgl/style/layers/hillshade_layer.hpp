@@ -6,7 +6,6 @@
 #include <mbgl/style/filter.hpp>
 #include <mbgl/style/property_value.hpp>
 #include <mbgl/style/expression/formatted.hpp>
-
 #include <mbgl/util/color.hpp>
 
 namespace mbgl {
@@ -25,41 +24,41 @@ public:
 
     // Paint properties
 
-    static PropertyValue<float> getDefaultHillshadeIlluminationDirection();
-    PropertyValue<float> getHillshadeIlluminationDirection() const;
-    void setHillshadeIlluminationDirection(PropertyValue<float>);
-    void setHillshadeIlluminationDirectionTransition(const TransitionOptions&);
-    TransitionOptions getHillshadeIlluminationDirectionTransition() const;
-
-    static PropertyValue<HillshadeIlluminationAnchorType> getDefaultHillshadeIlluminationAnchor();
-    PropertyValue<HillshadeIlluminationAnchorType> getHillshadeIlluminationAnchor() const;
-    void setHillshadeIlluminationAnchor(PropertyValue<HillshadeIlluminationAnchorType>);
-    void setHillshadeIlluminationAnchorTransition(const TransitionOptions&);
-    TransitionOptions getHillshadeIlluminationAnchorTransition() const;
+    static PropertyValue<Color> getDefaultHillshadeAccentColor();
+    const PropertyValue<Color>& getHillshadeAccentColor() const;
+    void setHillshadeAccentColor(const PropertyValue<Color>&);
+    void setHillshadeAccentColorTransition(const TransitionOptions&);
+    TransitionOptions getHillshadeAccentColorTransition() const;
 
     static PropertyValue<float> getDefaultHillshadeExaggeration();
-    PropertyValue<float> getHillshadeExaggeration() const;
-    void setHillshadeExaggeration(PropertyValue<float>);
+    const PropertyValue<float>& getHillshadeExaggeration() const;
+    void setHillshadeExaggeration(const PropertyValue<float>&);
     void setHillshadeExaggerationTransition(const TransitionOptions&);
     TransitionOptions getHillshadeExaggerationTransition() const;
 
-    static PropertyValue<Color> getDefaultHillshadeShadowColor();
-    PropertyValue<Color> getHillshadeShadowColor() const;
-    void setHillshadeShadowColor(PropertyValue<Color>);
-    void setHillshadeShadowColorTransition(const TransitionOptions&);
-    TransitionOptions getHillshadeShadowColorTransition() const;
-
     static PropertyValue<Color> getDefaultHillshadeHighlightColor();
-    PropertyValue<Color> getHillshadeHighlightColor() const;
-    void setHillshadeHighlightColor(PropertyValue<Color>);
+    const PropertyValue<Color>& getHillshadeHighlightColor() const;
+    void setHillshadeHighlightColor(const PropertyValue<Color>&);
     void setHillshadeHighlightColorTransition(const TransitionOptions&);
     TransitionOptions getHillshadeHighlightColorTransition() const;
 
-    static PropertyValue<Color> getDefaultHillshadeAccentColor();
-    PropertyValue<Color> getHillshadeAccentColor() const;
-    void setHillshadeAccentColor(PropertyValue<Color>);
-    void setHillshadeAccentColorTransition(const TransitionOptions&);
-    TransitionOptions getHillshadeAccentColorTransition() const;
+    static PropertyValue<HillshadeIlluminationAnchorType> getDefaultHillshadeIlluminationAnchor();
+    const PropertyValue<HillshadeIlluminationAnchorType>& getHillshadeIlluminationAnchor() const;
+    void setHillshadeIlluminationAnchor(const PropertyValue<HillshadeIlluminationAnchorType>&);
+    void setHillshadeIlluminationAnchorTransition(const TransitionOptions&);
+    TransitionOptions getHillshadeIlluminationAnchorTransition() const;
+
+    static PropertyValue<float> getDefaultHillshadeIlluminationDirection();
+    const PropertyValue<float>& getHillshadeIlluminationDirection() const;
+    void setHillshadeIlluminationDirection(const PropertyValue<float>&);
+    void setHillshadeIlluminationDirectionTransition(const TransitionOptions&);
+    TransitionOptions getHillshadeIlluminationDirectionTransition() const;
+
+    static PropertyValue<Color> getDefaultHillshadeShadowColor();
+    const PropertyValue<Color>& getHillshadeShadowColor() const;
+    void setHillshadeShadowColor(const PropertyValue<Color>&);
+    void setHillshadeShadowColorTransition(const TransitionOptions&);
+    TransitionOptions getHillshadeShadowColorTransition() const;
 
     // Private implementation
 
@@ -75,12 +74,4 @@ protected:
 };
 
 } // namespace style
-
-class HillshadeLayerFactory : public LayerFactory {
-protected:
-    const style::LayerTypeInfo* getTypeInfo() const noexcept final;
-    std::unique_ptr<style::Layer> createLayer(const std::string& id, const style::conversion::Convertible& value) noexcept final;
-    std::unique_ptr<RenderLayer> createRenderLayer(Immutable<style::Layer::Impl>) noexcept final;
-};
-
 } // namespace mbgl

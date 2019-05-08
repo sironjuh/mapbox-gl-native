@@ -1,9 +1,8 @@
 #pragma once
 
+#include <mbgl/layermanager/layer_manager.hpp>
 #include <mbgl/map/map.hpp>
 #include <mbgl/style/layer.hpp>
-
-#include <mbgl/renderer/render_layer.hpp>
 
 #include "layer.hpp"
 
@@ -30,13 +29,27 @@ public:
 
 private:
     LayerManagerAndroid();
-    void addLayerType(std::unique_ptr<JavaLayerPeerFactory>);
+    /**
+     * @brief Enables a layer type for both JSON style and runtime API.
+     */
+    void addLayerType(std::unique_ptr<JavaLayerPeerFactory>); 
+    /**
+     * @brief Enables a layer type for JSON style only.
+     *
+     * We might not want to expose runtime API for some layer types
+     * in order to save binary size - JNI glue code for these layer types
+     * won't be added to the binary. 
+     */
+    void addLayerTypeCoreOnly(std::unique_ptr<mbgl::LayerFactory>);
+
+    void registerCoreFactory(mbgl::LayerFactory*);
     JavaLayerPeerFactory* getPeerFactory(const mbgl::style::LayerTypeInfo*);
     // mbgl::LayerManager overrides.
     LayerFactory* getFactory(const std::string& type) noexcept final;
     LayerFactory* getFactory(const mbgl::style::LayerTypeInfo* info) noexcept final;
 
-    std::vector<std::unique_ptr<JavaLayerPeerFactory>> factories;
+    std::vector<std::unique_ptr<JavaLayerPeerFactory>> peerFactories;
+    std::vector<std::unique_ptr<mbgl::LayerFactory>> coreFactories;
     std::map<std::string, mbgl::LayerFactory*> typeToFactory;
 };
 

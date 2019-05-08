@@ -187,7 +187,7 @@ global.defaultValueJava = function(property) {
       case 'number':
         return '0.3f';
       case 'formatted':
-        return 'new Formatted(new FormattedSection[]{new FormattedSection("default")})'
+        return 'new Formatted(new FormattedSection("default"))'
       case 'string':
         return '"' + property['default'] + '"';
       case 'enum':
@@ -197,7 +197,12 @@ global.defaultValueJava = function(property) {
       case 'array':
              switch (property.value) {
               case 'string':
-                return '[' + property['default'] + "]";
+              case 'enum':
+                if (property['default'] !== undefined) {
+                    return '[' + property['default'] + ']';
+                } else {
+                    return 'new String[0]';
+                }
               case 'number':
                 var result ='new Float[] {';
                 for (var i = 0; i < property.length; i++) {

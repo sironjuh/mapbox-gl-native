@@ -37,7 +37,6 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
     }
 
     jFileSource = FileSource::getNativePeer(_env, _jFileSource);
-    auto& fileSource = mbgl::android::FileSource::getDefaultFileSource(_env, _jFileSource);
     auto size = mbgl::Size { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
     optional<mbgl::CameraOptions> cameraOptions;
@@ -56,11 +55,10 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
     } else {
         style = std::make_pair(false, jni::Make<std::string>(_env, styleURL));
     }
-    
+
     showLogo = _showLogo;
     // Create the core snapshotter
-    snapshotter = std::make_unique<mbgl::MapSnapshotter>(&fileSource,
-                                                         threadPool,
+    snapshotter = std::make_unique<mbgl::MapSnapshotter>(threadPool,
                                                          style,
                                                          size,
                                                          pixelRatio,
@@ -69,8 +67,8 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
                                                          jni::Make<std::string>(_env, _programCacheDir),
                                                          _localIdeographFontFamily ?
                                                             jni::Make<std::string>(_env, _localIdeographFontFamily) :
-                                                            optional<std::string>{});
-
+                                                            optional<std::string>{},
+                                                         mbgl::android::FileSource::getSharedResourceOptions(_env, _jFileSource));
 }
 
 MapSnapshotter::~MapSnapshotter() = default;
@@ -89,14 +87,20 @@ void MapSnapshotter::start(JNIEnv& env) {
         if (err) {
             // error handler callback
             static auto onSnapshotFailed = javaClass.GetMethod<void (jni::String)>(*_env, "onSnapshotFailed");
-            javaPeer.get(*_env).Call(*_env, onSnapshotFailed, jni::Make<jni::String>(*_env, util::toString(err)));
+            auto weakReference = javaPeer.get(*_env);
+            if (weakReference) {
+                weakReference.Call(*_env, onSnapshotFailed, jni::Make<jni::String>(*_env, util::toString(err)));
+            }
         } else {
             // Create the wrapper
             auto mapSnapshot = android::MapSnapshot::New(*_env, std::move(image), pixelRatio, attributions, showLogo, pointForFn, latLngForFn);
 
             // invoke callback
             static auto onSnapshotReady = javaClass.GetMethod<void (jni::Object<MapSnapshot>)>(*_env, "onSnapshotReady");
-            javaPeer.get(*_env).Call(*_env, onSnapshotReady, mapSnapshot);
+            auto weakReference = javaPeer.get(*_env);
+            if (weakReference) {
+                weakReference.Call(*_env, onSnapshotReady, mapSnapshot);
+            }
         }
 
         deactivateFilesource(*_env);

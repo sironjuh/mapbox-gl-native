@@ -5,9 +5,9 @@ include(node_modules/@mapbox/cmake-node-module/module.cmake)
 add_library(mbgl-loop-node INTERFACE)
 
 target_sources(mbgl-loop-node INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/async_task.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/run_loop.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/timer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/src/mbgl/util/async_task.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/src/mbgl/util/run_loop.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/src/mbgl/util/timer.cpp
 )
 
 target_include_directories(mbgl-loop-node INTERFACE
@@ -22,11 +22,11 @@ add_node_module(mbgl-node
     INSTALL_PATH "lib/{node_abi}/mbgl.node"
     NAN_VERSION "2.10.0"
     
-    # Don't build for Node 4.x, 5.x, 7.x, or 9.x
+    # Don't build for Node 4.x, 5.x, 7.x, 9.x, 11.x and 12.x
     # See https://nodejs.org/en/download/releases/ for mapping of Node version to ABI number.
     # Changes to this property should happen in tandem with updates to the version targets
     # in platform/node/scripts/publish.sh and the "node" engines property in package.json.
-    EXCLUDE_NODE_ABIS 46 47 51 59
+    EXCLUDE_NODE_ABIS 46 47 51 59 67 72
 )
 
 target_sources(mbgl-node INTERFACE
@@ -49,7 +49,7 @@ target_sources(mbgl-node INTERFACE
 )
 
 target_include_directories(mbgl-node INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default
+    ${CMAKE_CURRENT_SOURCE_DIR}/platform/default/include
 )
 
 target_link_libraries(mbgl-node INTERFACE

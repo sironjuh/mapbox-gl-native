@@ -6,7 +6,6 @@
 #include <mbgl/util/noncopyable.hpp>
 #include <mbgl/util/default_thread_pool.hpp>
 #include <mbgl/util/run_loop.hpp>
-#include <mbgl/storage/default_file_source.hpp>
 #include <mbgl/storage/network_status.hpp>
 
 #include "annotation/marker.hpp"
@@ -62,13 +61,15 @@ public:
     void onCameraDidChange(MapObserver::CameraChangeMode) override;
     void onWillStartLoadingMap() override;
     void onDidFinishLoadingMap() override;
-    void onDidFailLoadingMap(std::exception_ptr) override;
+    void onDidFailLoadingMap(MapLoadError, const std::string&) override;
     void onWillStartRenderingFrame() override;
     void onDidFinishRenderingFrame(MapObserver::RenderMode) override;
     void onWillStartRenderingMap() override;
     void onDidFinishRenderingMap(MapObserver::RenderMode) override;
+    void onDidBecomeIdle() override;
     void onDidFinishLoadingStyle() override;
     void onSourceChanged(mbgl::style::Source&) override;
+    void onStyleImageMissing(const std::string&) override;
 
     // JNI //
 
@@ -138,7 +139,9 @@ public:
 
     void setVisibleCoordinateBounds(JNIEnv&, const jni::Array<jni::Object<LatLng>>&, const jni::Object<RectF>&, jni::jdouble, jni::jlong);
 
-    void setContentPadding(JNIEnv&, double, double, double, double);
+    void setContentPadding(JNIEnv&, float, float, float, float);
+
+    jni::Local<jni::Array<jni::jfloat>> getContentPadding(JNIEnv&);
 
     void scheduleSnapshot(jni::JNIEnv&);
 
@@ -184,13 +187,9 @@ public:
 
     jni::jdouble getTopOffsetPixelsForAnnotationSymbol(JNIEnv&, const jni::String&);
 
-    jni::jlong getTransitionDuration(JNIEnv&);
+    jni::Local<jni::Object<TransitionOptions>> getTransitionOptions(JNIEnv&);
 
-    void setTransitionDuration(JNIEnv&, jni::jlong);
-
-    jni::jlong getTransitionDelay(JNIEnv&);
-
-    void setTransitionDelay(JNIEnv&, jni::jlong);
+    void setTransitionOptions(JNIEnv&, const jni::Object<TransitionOptions>&);
 
     jni::Local<jni::Array<jlong>> queryPointAnnotations(JNIEnv&, const jni::Object<RectF>&);
 
@@ -216,11 +215,9 @@ public:
 
     void addLayerAt(JNIEnv&, jni::jlong, jni::jint);
 
-    jni::Local<jni::Object<Layer>> removeLayerById(JNIEnv&, const jni::String&);
+    jni::jboolean removeLayerAt(JNIEnv&, jni::jint);
 
-    jni::Local<jni::Object<Layer>> removeLayerAt(JNIEnv&, jni::jint);
-
-    void removeLayer(JNIEnv&, jlong);
+    jni::jboolean removeLayer(JNIEnv&, jlong);
 
     jni::Local<jni::Array<jni::Object<Source>>> getSources(JNIEnv&);
 
@@ -228,9 +225,7 @@ public:
 
     void addSource(JNIEnv&, const jni::Object<Source>&, jlong nativePtr);
 
-    jni::Local<jni::Object<Source>> removeSourceById(JNIEnv&, const jni::String&);
-
-    void removeSource(JNIEnv&, const jni::Object<Source>&, jlong nativePtr);
+    jni::jboolean removeSource(JNIEnv&, const jni::Object<Source>&, jlong nativePtr);
 
     void addImage(JNIEnv&, const jni::String&, const jni::Object<Bitmap>& bitmap, jni::jfloat, jni::jboolean);
 
@@ -240,9 +235,9 @@ public:
 
     jni::Local<jni::Object<Bitmap>> getImage(JNIEnv&, const jni::String&);
 
-    void setPrefetchesTiles(JNIEnv&, jni::jboolean);
+    void setPrefetchTiles(JNIEnv&, jni::jboolean);
 
-    jni::jboolean getPrefetchesTiles(JNIEnv&);
+    jni::jboolean getPrefetchTiles(JNIEnv&);
 
     mbgl::Map& getMap();
 

@@ -1,14 +1,12 @@
 #import "MGLSDKUpdateChecker.h"
 #import "NSBundle+MGLAdditions.h"
-#import "NSProcessInfo+MGLAdditions.h"
 
 @implementation MGLSDKUpdateChecker
 
 + (void)checkForUpdates {
 #if TARGET_IPHONE_SIMULATOR
     // Abort if running in a playground.
-    if ([[NSBundle mainBundle].bundleIdentifier hasPrefix:@"com.apple.dt.playground."] ||
-        NSProcessInfo.processInfo.mgl_isInterfaceBuilderDesignablesAgent) {
+    if ([[NSBundle mainBundle].bundleIdentifier hasPrefix:@"com.apple.dt.playground."]) {
         return;
     }
 
@@ -20,7 +18,7 @@
         return;
     }
 
-    NSURL *url = [NSURL URLWithString:@"https://www.mapbox.com/ios-sdk/latest_version"];
+    NSURL *url = [NSURL URLWithString:@"https://docs.mapbox.com/ios/maps/latest_version.txt"];
     [[NSURLSession.sharedSession dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || ((NSHTTPURLResponse *)response).statusCode != 200) {
             return;

@@ -3,9 +3,6 @@
 #include <mbgl/renderer/paint_parameters.hpp>
 #include <mbgl/tile/vector_tile.hpp>
 
-#include <mbgl/algorithm/generate_clip_ids.hpp>
-#include <mbgl/algorithm/generate_clip_ids_impl.hpp>
-
 namespace mbgl {
 
 using namespace style;
@@ -24,7 +21,7 @@ bool RenderVectorSource::isLoaded() const {
 }
 
 void RenderVectorSource::update(Immutable<style::Source::Impl> baseImpl_,
-                                const std::vector<Immutable<Layer::Impl>>& layers,
+                                const std::vector<Immutable<style::LayerProperties>>& layers,
                                 const bool needsRendering,
                                 const bool needsRelayout,
                                 const TileParameters& parameters) {
@@ -39,9 +36,7 @@ void RenderVectorSource::update(Immutable<style::Source::Impl> baseImpl_,
 
         // TODO: this removes existing buckets, and will cause flickering.
         // Should instead refresh tile data in place.
-        tilePyramid.tiles.clear();
-        tilePyramid.renderTiles.clear();
-        tilePyramid.cache.clear();
+        tilePyramid.clearAll();
     }
     // Allow clearing the tile pyramid first, before the early return in case
     //  the new tileset is not yet available or has an error in loading
@@ -63,7 +58,6 @@ void RenderVectorSource::update(Immutable<style::Source::Impl> baseImpl_,
 }
 
 void RenderVectorSource::startRender(PaintParameters& parameters) {
-    parameters.clipIDGenerator.update(tilePyramid.getRenderTiles());
     tilePyramid.startRender(parameters);
 }
 

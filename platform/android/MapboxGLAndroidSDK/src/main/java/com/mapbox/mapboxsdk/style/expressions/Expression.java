@@ -1,5 +1,6 @@
 package com.mapbox.mapboxsdk.style.expressions;
 
+import android.annotation.SuppressLint;
 import android.support.annotation.ColorInt;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -1826,6 +1827,7 @@ public class Expression {
    * @return expression
    * @see <a href="https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-+">Style specification</a>
    */
+  @SuppressLint("Range")
   public static Expression sum(@Size(min = 2) Number... numbers) {
     Expression[] numberExpression = new Expression[numbers.length];
     for (int i = 0; i < numbers.length; i++) {
@@ -1874,6 +1876,7 @@ public class Expression {
    * @return expression
    * @see <a href="https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-*">Style specification</a>
    */
+  @SuppressLint("Range")
   public static Expression product(@Size(min = 2) Number... numbers) {
     Expression[] numberExpression = new Expression[numbers.length];
     for (int i = 0; i < numbers.length; i++) {
@@ -2590,6 +2593,7 @@ public class Expression {
    * @return expression
    * @see <a href="https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-min">Style specification</a>
    */
+  @SuppressLint("Range")
   public static Expression min(@Size(min = 1) Number... numbers) {
     Expression[] numberExpression = new Expression[numbers.length];
     for (int i = 0; i < numbers.length; i++) {
@@ -2638,6 +2642,7 @@ public class Expression {
    * @return expression
    * @see <a href="https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-max">Style specification</a>
    */
+  @SuppressLint("Range")
   public static Expression max(@Size(min = 1) Number... numbers) {
     Expression[] numberExpression = new Expression[numbers.length];
     for (int i = 0; i < numbers.length; i++) {
@@ -2838,7 +2843,8 @@ public class Expression {
    * CircleLayer circleLayer = new CircleLayer("layer-id", "source-id");
    * circleLayer.setProperties(
    * circleColor(switchCase(
-   * eq(literal("it"), resolvedLocale(collator(true, true, Locale.ITALY))), literal(ColorUtils.colorToRgbaString(Color.GREEN)),
+   * eq(literal("it"), resolvedLocale(collator(true, true, Locale.ITALY))), literal(ColorUtils.colorToRgbaString
+   * (Color.GREEN)),
    * literal(ColorUtils.colorToRgbaString(Color.RED))))
    * );
    * }
@@ -2862,7 +2868,7 @@ public class Expression {
    * </p>
    * <pre>
    * {@code
-   * mapboxMap.addLayer(new SymbolLayer("layer-id", "source-id")
+   * mapboxMap.getStyle().addLayer(new SymbolLayer("layer-id", "source-id")
    *   .withProperties(
    *     textField(
    *       switchCase(
@@ -2893,7 +2899,7 @@ public class Expression {
    * </p>
    * <pre>
    * {@code
-   * mapboxMap.addLayer(new SymbolLayer("layer-id", "source-id")
+   * mapboxMap.getStyle().addLayer(new SymbolLayer("layer-id", "source-id")
    * .withProperties(
    *   textField(
    *     switchCase(
@@ -3621,7 +3627,8 @@ public class Expression {
    * @return expression
    * @see <a href="https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-step">Style specification</a>
    */
-  public static Expression step(@NonNull Expression input, @NonNull Expression defaultOutput, @NonNull Expression... stops) {
+  public static Expression step(@NonNull Expression input, @NonNull Expression defaultOutput,
+                                @NonNull Expression... stops) {
     return new Expression("step", join(new Expression[] {input, defaultOutput}, stops));
   }
 
@@ -4406,7 +4413,7 @@ public class Expression {
     /**
      * If set, the text-font argument overrides the font specified by the root layout properties.
      * <p>
-     * "text-font" is required to a literal array.
+     * "text-font" is required to be a literal array.
      * <p>
      * The requested font stack has to be a part of the used style.
      * For more information see <a href="https://www.mapbox.com/help/define-font-stack/">the documentation</a>.
@@ -4422,7 +4429,7 @@ public class Expression {
     /**
      * If set, the text-font argument overrides the font specified by the root layout properties.
      * <p>
-     * "text-font" is required to a literal array.
+     * "text-font" is required to be a literal array.
      * <p>
      * The requested font stack has to be a part of the used style.
      * For more information see <a href="https://www.mapbox.com/help/define-font-stack/">the documentation</a>.
@@ -4433,6 +4440,28 @@ public class Expression {
     @NonNull
     public static FormatOption formatTextFont(@NonNull String[] fontStack) {
       return new FormatOption("text-font", literal(fontStack));
+    }
+
+    /**
+     * If set, the text-color argument overrides the color specified by the root paint properties.
+     *
+     * @param expression expression
+     * @return format option
+     */
+    @NonNull
+    public static FormatOption formatTextColor(@NonNull Expression expression) {
+      return new FormatOption("text-color", expression);
+    }
+
+    /**
+     * If set, the text-color argument overrides the color specified by the root paint properties.
+     *
+     * @param color value
+     * @return format option
+     */
+    @NonNull
+    public static FormatOption formatTextColor(@ColorInt int color) {
+      return new FormatOption("text-color", color(color));
     }
   }
 

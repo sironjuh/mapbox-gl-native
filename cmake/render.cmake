@@ -3,14 +3,13 @@ add_executable(mbgl-render
 )
 
 target_include_directories(mbgl-render
-    PRIVATE platform/default
+    PRIVATE platform/default/include
 )
 
 target_link_libraries(mbgl-render
     PRIVATE mbgl-core
+    PRIVATE args
 )
-
-target_add_mason_package(mbgl-render PRIVATE args)
 
 mbgl_platform_render()
 

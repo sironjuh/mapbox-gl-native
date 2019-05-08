@@ -52,6 +52,8 @@ extension MGLMapViewDelegateIntegrationTests: MGLMapViewDelegate {
     func mapView(_ mapView: MGLMapView, didUpdate userLocation: MGLUserLocation?) {}
 
     func mapViewDidFinishRenderingMap(_ mapView: MGLMapView, fullyRendered: Bool) {}
+    
+     func mapViewDidBecomeIdle(_ mapView: MGLMapView) {}
 
     func mapView(_ mapView: MGLMapView, didFailToLocateUserWithError error: Error) {}
 
@@ -94,4 +96,6 @@ extension MGLMapViewDelegateIntegrationTests: MGLMapViewDelegate {
     func mapView(_ mapView: MGLMapView, shouldChangeFrom oldCamera: MGLMapCamera, to newCamera: MGLMapCamera, reason: MGLCameraChangeReason) -> Bool { return false }
     
     func mapViewUserLocationAnchorPoint(_ mapView: MGLMapView) -> CGPoint { return CGPoint(x: 100, y: 100) }
+    
+    func mapView(_ mapView: MGLMapView, didFailToLoadImage imageName: String) -> UIImage? { return nil }
 }

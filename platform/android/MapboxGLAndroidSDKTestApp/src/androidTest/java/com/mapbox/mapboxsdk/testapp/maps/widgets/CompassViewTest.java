@@ -4,10 +4,9 @@ import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.testapp.R;
-import com.mapbox.mapboxsdk.testapp.activity.BaseActivityTest;
-import com.mapbox.mapboxsdk.testapp.activity.espresso.EspressoTestActivity;
+import com.mapbox.mapboxsdk.testapp.action.WaitAction;
+import com.mapbox.mapboxsdk.testapp.activity.EspressoTest;
 import com.mapbox.mapboxsdk.testapp.utils.TestConstants;
-
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -20,12 +19,7 @@ import static com.mapbox.mapboxsdk.testapp.action.MapboxMapAction.invoke;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 
-public class CompassViewTest extends BaseActivityTest {
-
-  @Override
-  protected Class getActivityClass() {
-    return EspressoTestActivity.class;
-  }
+public class CompassViewTest extends EspressoTest {
 
   @Test
   public void testDefault() {
@@ -62,7 +56,7 @@ public class CompassViewTest extends BaseActivityTest {
         .build()
     )));
     onView(withId(R.id.compassView)).perform(click());
-    waitAction();
+    WaitAction.invoke(500);
     onView(withId(R.id.compassView)).check(matches(not(isDisplayed())));
     invoke(mapboxMap, (uiController, mapboxMap) -> {
       CameraPosition cameraPosition = mapboxMap.getCameraPosition();

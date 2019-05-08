@@ -3,8 +3,7 @@
 #include <mbgl/renderer/render_tile.hpp>
 #include <mbgl/renderer/paint_parameters.hpp>
 
-#include <mbgl/algorithm/generate_clip_ids.hpp>
-#include <mbgl/algorithm/generate_clip_ids_impl.hpp>
+#include <mbgl/layermanager/layer_manager.hpp>
 
 namespace mbgl {
 
@@ -12,6 +11,7 @@ using namespace style;
 
 RenderAnnotationSource::RenderAnnotationSource(Immutable<AnnotationSource::Impl> impl_)
     : RenderSource(impl_) {
+    assert(LayerManager::annotationsEnabled);
     tilePyramid.setObserver(this);
 }
 
@@ -24,7 +24,7 @@ bool RenderAnnotationSource::isLoaded() const {
 }
 
 void RenderAnnotationSource::update(Immutable<style::Source::Impl> baseImpl_,
-                                    const std::vector<Immutable<Layer::Impl>>& layers,
+                                    const std::vector<Immutable<style::LayerProperties>>& layers,
                                     const bool needsRendering,
                                     const bool needsRelayout,
                                     const TileParameters& parameters) {
@@ -48,7 +48,6 @@ void RenderAnnotationSource::update(Immutable<style::Source::Impl> baseImpl_,
 }
 
 void RenderAnnotationSource::startRender(PaintParameters& parameters) {
-    parameters.clipIDGenerator.update(tilePyramid.getRenderTiles());
     tilePyramid.startRender(parameters);
 }
 

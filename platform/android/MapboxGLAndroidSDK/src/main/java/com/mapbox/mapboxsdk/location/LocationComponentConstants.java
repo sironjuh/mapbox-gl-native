@@ -1,12 +1,12 @@
 package com.mapbox.mapboxsdk.location;
 
 /**
- * Contains all the constants being used for the Location layer.
+ * Contains all the constants being used for the {@link LocationComponent}.
  */
-final class LocationComponentConstants {
+public final class LocationComponentConstants {
 
   // Controls the compass update rate in milliseconds
-  static final int COMPASS_UPDATE_RATE_MS = 500;
+  static final long COMPASS_UPDATE_RATE_MS = 500;
 
   // Sets the transition animation duration when switching camera modes.
   static final long TRANSITION_ANIMATION_DURATION_MS = 750;
@@ -24,7 +24,7 @@ final class LocationComponentConstants {
   static final long DEFAULT_TRACKING_TILT_ANIM_DURATION = 1250;
 
   // Threshold value to perform immediate camera/layer position update.
-  static final double INSTANT_LOCATION_TRANSITION_THRESHOLD = 500_000;
+  static final double INSTANT_LOCATION_TRANSITION_THRESHOLD = 50_000;
 
   // Default interval between location updates
   static final long DEFAULT_INTERVAL_MILLIS = 1000;
@@ -33,7 +33,12 @@ final class LocationComponentConstants {
   static final long DEFAULT_FASTEST_INTERVAL_MILLIS = 1000;
 
   // Sources
-  static final String LOCATION_SOURCE = "mapbox-location-source";
+
+  /**
+   * Source ID of the location's GeoJsonSource.
+   */
+  public static final String LOCATION_SOURCE = "mapbox-location-source";
+
   static final String PROPERTY_GPS_BEARING = "mapbox-property-gps-bearing";
   static final String PROPERTY_COMPASS_BEARING = "mapbox-property-compass-bearing";
   static final String PROPERTY_LOCATION_STALE = "mapbox-property-location-stale";
@@ -49,11 +54,31 @@ final class LocationComponentConstants {
   static final String PROPERTY_BEARING_ICON = "mapbox-property-shadow-icon";
 
   // Layers
-  static final String SHADOW_LAYER = "mapbox-location-shadow";
-  static final String FOREGROUND_LAYER = "mapbox-location-layer";
-  static final String BACKGROUND_LAYER = "mapbox-location-stroke-layer";
-  static final String ACCURACY_LAYER = "mapbox-location-accuracy-layer";
-  static final String BEARING_LAYER = "mapbox-location-bearing-layer";
+
+  /**
+   * Layer ID of the location shadow.
+   */
+  public static final String SHADOW_LAYER = "mapbox-location-shadow-layer";
+
+  /**
+   * Layer ID of the location foreground icon.
+   */
+  public static final String FOREGROUND_LAYER = "mapbox-location-foreground-layer";
+
+  /**
+   * Layer ID of the location background icon.
+   */
+  public static final String BACKGROUND_LAYER = "mapbox-location-background-layer";
+
+  /**
+   * Layer ID of the location accuracy.
+   */
+  public static final String ACCURACY_LAYER = "mapbox-location-accuracy-layer";
+
+  /**
+   * Layer ID of the location bearing icon.
+   */
+  public static final String BEARING_LAYER = "mapbox-location-bearing-layer";
 
   // Icons
   static final String FOREGROUND_ICON = "mapbox-location-icon";

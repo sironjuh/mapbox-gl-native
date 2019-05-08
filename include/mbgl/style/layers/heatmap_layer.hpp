@@ -7,7 +7,6 @@
 #include <mbgl/style/filter.hpp>
 #include <mbgl/style/property_value.hpp>
 #include <mbgl/style/expression/formatted.hpp>
-
 #include <mbgl/util/color.hpp>
 
 namespace mbgl {
@@ -26,35 +25,35 @@ public:
 
     // Paint properties
 
+    static ColorRampPropertyValue getDefaultHeatmapColor();
+    const ColorRampPropertyValue& getHeatmapColor() const;
+    void setHeatmapColor(const ColorRampPropertyValue&);
+    void setHeatmapColorTransition(const TransitionOptions&);
+    TransitionOptions getHeatmapColorTransition() const;
+
+    static PropertyValue<float> getDefaultHeatmapIntensity();
+    const PropertyValue<float>& getHeatmapIntensity() const;
+    void setHeatmapIntensity(const PropertyValue<float>&);
+    void setHeatmapIntensityTransition(const TransitionOptions&);
+    TransitionOptions getHeatmapIntensityTransition() const;
+
+    static PropertyValue<float> getDefaultHeatmapOpacity();
+    const PropertyValue<float>& getHeatmapOpacity() const;
+    void setHeatmapOpacity(const PropertyValue<float>&);
+    void setHeatmapOpacityTransition(const TransitionOptions&);
+    TransitionOptions getHeatmapOpacityTransition() const;
+
     static PropertyValue<float> getDefaultHeatmapRadius();
-    PropertyValue<float> getHeatmapRadius() const;
-    void setHeatmapRadius(PropertyValue<float>);
+    const PropertyValue<float>& getHeatmapRadius() const;
+    void setHeatmapRadius(const PropertyValue<float>&);
     void setHeatmapRadiusTransition(const TransitionOptions&);
     TransitionOptions getHeatmapRadiusTransition() const;
 
     static PropertyValue<float> getDefaultHeatmapWeight();
-    PropertyValue<float> getHeatmapWeight() const;
-    void setHeatmapWeight(PropertyValue<float>);
+    const PropertyValue<float>& getHeatmapWeight() const;
+    void setHeatmapWeight(const PropertyValue<float>&);
     void setHeatmapWeightTransition(const TransitionOptions&);
     TransitionOptions getHeatmapWeightTransition() const;
-
-    static PropertyValue<float> getDefaultHeatmapIntensity();
-    PropertyValue<float> getHeatmapIntensity() const;
-    void setHeatmapIntensity(PropertyValue<float>);
-    void setHeatmapIntensityTransition(const TransitionOptions&);
-    TransitionOptions getHeatmapIntensityTransition() const;
-
-    static ColorRampPropertyValue getDefaultHeatmapColor();
-    ColorRampPropertyValue getHeatmapColor() const;
-    void setHeatmapColor(ColorRampPropertyValue);
-    void setHeatmapColorTransition(const TransitionOptions&);
-    TransitionOptions getHeatmapColorTransition() const;
-
-    static PropertyValue<float> getDefaultHeatmapOpacity();
-    PropertyValue<float> getHeatmapOpacity() const;
-    void setHeatmapOpacity(PropertyValue<float>);
-    void setHeatmapOpacityTransition(const TransitionOptions&);
-    TransitionOptions getHeatmapOpacityTransition() const;
 
     // Private implementation
 
@@ -70,12 +69,4 @@ protected:
 };
 
 } // namespace style
-
-class HeatmapLayerFactory : public LayerFactory {
-protected:
-    const style::LayerTypeInfo* getTypeInfo() const noexcept final;
-    std::unique_ptr<style::Layer> createLayer(const std::string& id, const style::conversion::Convertible& value) noexcept final;
-    std::unique_ptr<RenderLayer> createRenderLayer(Immutable<style::Layer::Impl>) noexcept final;
-};
-
 } // namespace mbgl

@@ -9,9 +9,8 @@
 #include <mbgl/style/conversion/transition_options.hpp>
 #include <mbgl/style/conversion/json.hpp>
 #include <mbgl/style/conversion_impl.hpp>
-#include <mbgl/util/fnv_hash.hpp>
 
-#include <mbgl/renderer/layers/render_line_layer.hpp>
+#include <mapbox/eternal.hpp>
 
 namespace mbgl {
 namespace style {
@@ -24,7 +23,7 @@ const LayerTypeInfo* LineLayer::Impl::staticTypeInfo() noexcept {
           LayerTypeInfo::Source::Required,
           LayerTypeInfo::Pass3D::NotRequired,
           LayerTypeInfo::Layout::Required,
-          LayerTypeInfo::Clipping::Required
+          LayerTypeInfo::FadingTiles::NotRequired
         };
     return &typeInfo;
 }
@@ -65,11 +64,11 @@ PropertyValue<LineCapType> LineLayer::getDefaultLineCap() {
     return LineCap::defaultValue();
 }
 
-PropertyValue<LineCapType> LineLayer::getLineCap() const {
+const PropertyValue<LineCapType>& LineLayer::getLineCap() const {
     return impl().layout.get<LineCap>();
 }
 
-void LineLayer::setLineCap(PropertyValue<LineCapType> value) {
+void LineLayer::setLineCap(const PropertyValue<LineCapType>& value) {
     if (value == getLineCap())
         return;
     auto impl_ = mutableImpl();
@@ -81,11 +80,11 @@ PropertyValue<LineJoinType> LineLayer::getDefaultLineJoin() {
     return LineJoin::defaultValue();
 }
 
-PropertyValue<LineJoinType> LineLayer::getLineJoin() const {
+const PropertyValue<LineJoinType>& LineLayer::getLineJoin() const {
     return impl().layout.get<LineJoin>();
 }
 
-void LineLayer::setLineJoin(PropertyValue<LineJoinType> value) {
+void LineLayer::setLineJoin(const PropertyValue<LineJoinType>& value) {
     if (value == getLineJoin())
         return;
     auto impl_ = mutableImpl();
@@ -97,11 +96,11 @@ PropertyValue<float> LineLayer::getDefaultLineMiterLimit() {
     return LineMiterLimit::defaultValue();
 }
 
-PropertyValue<float> LineLayer::getLineMiterLimit() const {
+const PropertyValue<float>& LineLayer::getLineMiterLimit() const {
     return impl().layout.get<LineMiterLimit>();
 }
 
-void LineLayer::setLineMiterLimit(PropertyValue<float> value) {
+void LineLayer::setLineMiterLimit(const PropertyValue<float>& value) {
     if (value == getLineMiterLimit())
         return;
     auto impl_ = mutableImpl();
@@ -113,11 +112,11 @@ PropertyValue<float> LineLayer::getDefaultLineRoundLimit() {
     return LineRoundLimit::defaultValue();
 }
 
-PropertyValue<float> LineLayer::getLineRoundLimit() const {
+const PropertyValue<float>& LineLayer::getLineRoundLimit() const {
     return impl().layout.get<LineRoundLimit>();
 }
 
-void LineLayer::setLineRoundLimit(PropertyValue<float> value) {
+void LineLayer::setLineRoundLimit(const PropertyValue<float>& value) {
     if (value == getLineRoundLimit())
         return;
     auto impl_ = mutableImpl();
@@ -128,42 +127,42 @@ void LineLayer::setLineRoundLimit(PropertyValue<float> value) {
 
 // Paint properties
 
-PropertyValue<float> LineLayer::getDefaultLineOpacity() {
-    return { 1 };
+PropertyValue<float> LineLayer::getDefaultLineBlur() {
+    return { 0 };
 }
 
-PropertyValue<float> LineLayer::getLineOpacity() const {
-    return impl().paint.template get<LineOpacity>().value;
+const PropertyValue<float>& LineLayer::getLineBlur() const {
+    return impl().paint.template get<LineBlur>().value;
 }
 
-void LineLayer::setLineOpacity(PropertyValue<float> value) {
-    if (value == getLineOpacity())
+void LineLayer::setLineBlur(const PropertyValue<float>& value) {
+    if (value == getLineBlur())
         return;
     auto impl_ = mutableImpl();
-    impl_->paint.template get<LineOpacity>().value = value;
+    impl_->paint.template get<LineBlur>().value = value;
     baseImpl = std::move(impl_);
     observer->onLayerChanged(*this);
 }
 
-void LineLayer::setLineOpacityTransition(const TransitionOptions& options) {
+void LineLayer::setLineBlurTransition(const TransitionOptions& options) {
     auto impl_ = mutableImpl();
-    impl_->paint.template get<LineOpacity>().options = options;
+    impl_->paint.template get<LineBlur>().options = options;
     baseImpl = std::move(impl_);
 }
 
-TransitionOptions LineLayer::getLineOpacityTransition() const {
-    return impl().paint.template get<LineOpacity>().options;
+TransitionOptions LineLayer::getLineBlurTransition() const {
+    return impl().paint.template get<LineBlur>().options;
 }
 
 PropertyValue<Color> LineLayer::getDefaultLineColor() {
     return { Color::black() };
 }
 
-PropertyValue<Color> LineLayer::getLineColor() const {
+const PropertyValue<Color>& LineLayer::getLineColor() const {
     return impl().paint.template get<LineColor>().value;
 }
 
-void LineLayer::setLineColor(PropertyValue<Color> value) {
+void LineLayer::setLineColor(const PropertyValue<Color>& value) {
     if (value == getLineColor())
         return;
     auto impl_ = mutableImpl();
@@ -182,15 +181,177 @@ TransitionOptions LineLayer::getLineColorTransition() const {
     return impl().paint.template get<LineColor>().options;
 }
 
+PropertyValue<std::vector<float>> LineLayer::getDefaultLineDasharray() {
+    return { {  } };
+}
+
+const PropertyValue<std::vector<float>>& LineLayer::getLineDasharray() const {
+    return impl().paint.template get<LineDasharray>().value;
+}
+
+void LineLayer::setLineDasharray(const PropertyValue<std::vector<float>>& value) {
+    if (value == getLineDasharray())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineDasharray>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLineDasharrayTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineDasharray>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLineDasharrayTransition() const {
+    return impl().paint.template get<LineDasharray>().options;
+}
+
+PropertyValue<float> LineLayer::getDefaultLineGapWidth() {
+    return { 0 };
+}
+
+const PropertyValue<float>& LineLayer::getLineGapWidth() const {
+    return impl().paint.template get<LineGapWidth>().value;
+}
+
+void LineLayer::setLineGapWidth(const PropertyValue<float>& value) {
+    if (value == getLineGapWidth())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineGapWidth>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLineGapWidthTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineGapWidth>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLineGapWidthTransition() const {
+    return impl().paint.template get<LineGapWidth>().options;
+}
+
+ColorRampPropertyValue LineLayer::getDefaultLineGradient() {
+    return { {} };
+}
+
+const ColorRampPropertyValue& LineLayer::getLineGradient() const {
+    return impl().paint.template get<LineGradient>().value;
+}
+
+void LineLayer::setLineGradient(const ColorRampPropertyValue& value) {
+    if (value == getLineGradient())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineGradient>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLineGradientTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineGradient>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLineGradientTransition() const {
+    return impl().paint.template get<LineGradient>().options;
+}
+
+PropertyValue<float> LineLayer::getDefaultLineOffset() {
+    return { 0 };
+}
+
+const PropertyValue<float>& LineLayer::getLineOffset() const {
+    return impl().paint.template get<LineOffset>().value;
+}
+
+void LineLayer::setLineOffset(const PropertyValue<float>& value) {
+    if (value == getLineOffset())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineOffset>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLineOffsetTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineOffset>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLineOffsetTransition() const {
+    return impl().paint.template get<LineOffset>().options;
+}
+
+PropertyValue<float> LineLayer::getDefaultLineOpacity() {
+    return { 1 };
+}
+
+const PropertyValue<float>& LineLayer::getLineOpacity() const {
+    return impl().paint.template get<LineOpacity>().value;
+}
+
+void LineLayer::setLineOpacity(const PropertyValue<float>& value) {
+    if (value == getLineOpacity())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineOpacity>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLineOpacityTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LineOpacity>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLineOpacityTransition() const {
+    return impl().paint.template get<LineOpacity>().options;
+}
+
+PropertyValue<std::string> LineLayer::getDefaultLinePattern() {
+    return { "" };
+}
+
+const PropertyValue<std::string>& LineLayer::getLinePattern() const {
+    return impl().paint.template get<LinePattern>().value;
+}
+
+void LineLayer::setLinePattern(const PropertyValue<std::string>& value) {
+    if (value == getLinePattern())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LinePattern>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void LineLayer::setLinePatternTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<LinePattern>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions LineLayer::getLinePatternTransition() const {
+    return impl().paint.template get<LinePattern>().options;
+}
+
 PropertyValue<std::array<float, 2>> LineLayer::getDefaultLineTranslate() {
     return { {{ 0, 0 }} };
 }
 
-PropertyValue<std::array<float, 2>> LineLayer::getLineTranslate() const {
+const PropertyValue<std::array<float, 2>>& LineLayer::getLineTranslate() const {
     return impl().paint.template get<LineTranslate>().value;
 }
 
-void LineLayer::setLineTranslate(PropertyValue<std::array<float, 2>> value) {
+void LineLayer::setLineTranslate(const PropertyValue<std::array<float, 2>>& value) {
     if (value == getLineTranslate())
         return;
     auto impl_ = mutableImpl();
@@ -213,11 +374,11 @@ PropertyValue<TranslateAnchorType> LineLayer::getDefaultLineTranslateAnchor() {
     return { TranslateAnchorType::Map };
 }
 
-PropertyValue<TranslateAnchorType> LineLayer::getLineTranslateAnchor() const {
+const PropertyValue<TranslateAnchorType>& LineLayer::getLineTranslateAnchor() const {
     return impl().paint.template get<LineTranslateAnchor>().value;
 }
 
-void LineLayer::setLineTranslateAnchor(PropertyValue<TranslateAnchorType> value) {
+void LineLayer::setLineTranslateAnchor(const PropertyValue<TranslateAnchorType>& value) {
     if (value == getLineTranslateAnchor())
         return;
     auto impl_ = mutableImpl();
@@ -240,15 +401,16 @@ PropertyValue<float> LineLayer::getDefaultLineWidth() {
     return { 1 };
 }
 
-PropertyValue<float> LineLayer::getLineWidth() const {
+const PropertyValue<float>& LineLayer::getLineWidth() const {
     return impl().paint.template get<LineWidth>().value;
 }
 
-void LineLayer::setLineWidth(PropertyValue<float> value) {
+void LineLayer::setLineWidth(const PropertyValue<float>& value) {
     if (value == getLineWidth())
         return;
     auto impl_ = mutableImpl();
     impl_->paint.template get<LineWidth>().value = value;
+    impl_->paint.template get<LineFloorWidth>().value = value;
     baseImpl = std::move(impl_);
     observer->onLayerChanged(*this);
 }
@@ -263,331 +425,76 @@ TransitionOptions LineLayer::getLineWidthTransition() const {
     return impl().paint.template get<LineWidth>().options;
 }
 
-PropertyValue<float> LineLayer::getDefaultLineGapWidth() {
-    return { 0 };
-}
-
-PropertyValue<float> LineLayer::getLineGapWidth() const {
-    return impl().paint.template get<LineGapWidth>().value;
-}
-
-void LineLayer::setLineGapWidth(PropertyValue<float> value) {
-    if (value == getLineGapWidth())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineGapWidth>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLineGapWidthTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineGapWidth>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLineGapWidthTransition() const {
-    return impl().paint.template get<LineGapWidth>().options;
-}
-
-PropertyValue<float> LineLayer::getDefaultLineOffset() {
-    return { 0 };
-}
-
-PropertyValue<float> LineLayer::getLineOffset() const {
-    return impl().paint.template get<LineOffset>().value;
-}
-
-void LineLayer::setLineOffset(PropertyValue<float> value) {
-    if (value == getLineOffset())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineOffset>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLineOffsetTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineOffset>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLineOffsetTransition() const {
-    return impl().paint.template get<LineOffset>().options;
-}
-
-PropertyValue<float> LineLayer::getDefaultLineBlur() {
-    return { 0 };
-}
-
-PropertyValue<float> LineLayer::getLineBlur() const {
-    return impl().paint.template get<LineBlur>().value;
-}
-
-void LineLayer::setLineBlur(PropertyValue<float> value) {
-    if (value == getLineBlur())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineBlur>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLineBlurTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineBlur>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLineBlurTransition() const {
-    return impl().paint.template get<LineBlur>().options;
-}
-
-PropertyValue<std::vector<float>> LineLayer::getDefaultLineDasharray() {
-    return { {  } };
-}
-
-PropertyValue<std::vector<float>> LineLayer::getLineDasharray() const {
-    return impl().paint.template get<LineDasharray>().value;
-}
-
-void LineLayer::setLineDasharray(PropertyValue<std::vector<float>> value) {
-    if (value == getLineDasharray())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineDasharray>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLineDasharrayTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineDasharray>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLineDasharrayTransition() const {
-    return impl().paint.template get<LineDasharray>().options;
-}
-
-PropertyValue<std::string> LineLayer::getDefaultLinePattern() {
-    return { "" };
-}
-
-PropertyValue<std::string> LineLayer::getLinePattern() const {
-    return impl().paint.template get<LinePattern>().value;
-}
-
-void LineLayer::setLinePattern(PropertyValue<std::string> value) {
-    if (value == getLinePattern())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LinePattern>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLinePatternTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LinePattern>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLinePatternTransition() const {
-    return impl().paint.template get<LinePattern>().options;
-}
-
-ColorRampPropertyValue LineLayer::getDefaultLineGradient() {
-    return { {} };
-}
-
-ColorRampPropertyValue LineLayer::getLineGradient() const {
-    return impl().paint.template get<LineGradient>().value;
-}
-
-void LineLayer::setLineGradient(ColorRampPropertyValue value) {
-    if (value == getLineGradient())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineGradient>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void LineLayer::setLineGradientTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<LineGradient>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions LineLayer::getLineGradientTransition() const {
-    return impl().paint.template get<LineGradient>().options;
-}
-
 using namespace conversion;
 
 optional<Error> LineLayer::setPaintProperty(const std::string& name, const Convertible& value) {
-    enum class Property {
-        Unknown,
-        LineOpacity,
+    enum class Property : uint8_t {
+        LineBlur,
         LineColor,
+        LineDasharray,
+        LineGapWidth,
+        LineGradient,
+        LineOffset,
+        LineOpacity,
+        LinePattern,
         LineTranslate,
         LineTranslateAnchor,
         LineWidth,
-        LineGapWidth,
-        LineOffset,
-        LineBlur,
-        LineDasharray,
-        LinePattern,
-        LineGradient,
-        LineOpacityTransition,
+        LineBlurTransition,
         LineColorTransition,
+        LineDasharrayTransition,
+        LineGapWidthTransition,
+        LineGradientTransition,
+        LineOffsetTransition,
+        LineOpacityTransition,
+        LinePatternTransition,
         LineTranslateTransition,
         LineTranslateAnchorTransition,
         LineWidthTransition,
-        LineGapWidthTransition,
-        LineOffsetTransition,
-        LineBlurTransition,
-        LineDasharrayTransition,
-        LinePatternTransition,
-        LineGradientTransition,
     };
 
-    Property property = Property::Unknown;
-    switch (util::hashFNV1a(name.c_str())) {
-    case util::hashFNV1a("line-opacity"):
-        if (name == "line-opacity") {
-            property = Property::LineOpacity;
-        }
-        break;
-    case util::hashFNV1a("line-opacity-transition"):
-        if (name == "line-opacity-transition") {
-            property = Property::LineOpacityTransition;
-        }
-        break;
-    case util::hashFNV1a("line-color"):
-        if (name == "line-color") {
-            property = Property::LineColor;
-        }
-        break;
-    case util::hashFNV1a("line-color-transition"):
-        if (name == "line-color-transition") {
-            property = Property::LineColorTransition;
-        }
-        break;
-    case util::hashFNV1a("line-translate"):
-        if (name == "line-translate") {
-            property = Property::LineTranslate;
-        }
-        break;
-    case util::hashFNV1a("line-translate-transition"):
-        if (name == "line-translate-transition") {
-            property = Property::LineTranslateTransition;
-        }
-        break;
-    case util::hashFNV1a("line-translate-anchor"):
-        if (name == "line-translate-anchor") {
-            property = Property::LineTranslateAnchor;
-        }
-        break;
-    case util::hashFNV1a("line-translate-anchor-transition"):
-        if (name == "line-translate-anchor-transition") {
-            property = Property::LineTranslateAnchorTransition;
-        }
-        break;
-    case util::hashFNV1a("line-width"):
-        if (name == "line-width") {
-            property = Property::LineWidth;
-        }
-        break;
-    case util::hashFNV1a("line-width-transition"):
-        if (name == "line-width-transition") {
-            property = Property::LineWidthTransition;
-        }
-        break;
-    case util::hashFNV1a("line-gap-width"):
-        if (name == "line-gap-width") {
-            property = Property::LineGapWidth;
-        }
-        break;
-    case util::hashFNV1a("line-gap-width-transition"):
-        if (name == "line-gap-width-transition") {
-            property = Property::LineGapWidthTransition;
-        }
-        break;
-    case util::hashFNV1a("line-offset"):
-        if (name == "line-offset") {
-            property = Property::LineOffset;
-        }
-        break;
-    case util::hashFNV1a("line-offset-transition"):
-        if (name == "line-offset-transition") {
-            property = Property::LineOffsetTransition;
-        }
-        break;
-    case util::hashFNV1a("line-blur"):
-        if (name == "line-blur") {
-            property = Property::LineBlur;
-        }
-        break;
-    case util::hashFNV1a("line-blur-transition"):
-        if (name == "line-blur-transition") {
-            property = Property::LineBlurTransition;
-        }
-        break;
-    case util::hashFNV1a("line-dasharray"):
-        if (name == "line-dasharray") {
-            property = Property::LineDasharray;
-        }
-        break;
-    case util::hashFNV1a("line-dasharray-transition"):
-        if (name == "line-dasharray-transition") {
-            property = Property::LineDasharrayTransition;
-        }
-        break;
-    case util::hashFNV1a("line-pattern"):
-        if (name == "line-pattern") {
-            property = Property::LinePattern;
-        }
-        break;
-    case util::hashFNV1a("line-pattern-transition"):
-        if (name == "line-pattern-transition") {
-            property = Property::LinePatternTransition;
-        }
-        break;
-    case util::hashFNV1a("line-gradient"):
-        if (name == "line-gradient") {
-            property = Property::LineGradient;
-        }
-        break;
-    case util::hashFNV1a("line-gradient-transition"):
-        if (name == "line-gradient-transition") {
-            property = Property::LineGradientTransition;
-        }
-        break;
-    
-    }
+    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
+        { "line-blur", static_cast<uint8_t>(Property::LineBlur) },
+        { "line-color", static_cast<uint8_t>(Property::LineColor) },
+        { "line-dasharray", static_cast<uint8_t>(Property::LineDasharray) },
+        { "line-gap-width", static_cast<uint8_t>(Property::LineGapWidth) },
+        { "line-gradient", static_cast<uint8_t>(Property::LineGradient) },
+        { "line-offset", static_cast<uint8_t>(Property::LineOffset) },
+        { "line-opacity", static_cast<uint8_t>(Property::LineOpacity) },
+        { "line-pattern", static_cast<uint8_t>(Property::LinePattern) },
+        { "line-translate", static_cast<uint8_t>(Property::LineTranslate) },
+        { "line-translate-anchor", static_cast<uint8_t>(Property::LineTranslateAnchor) },
+        { "line-width", static_cast<uint8_t>(Property::LineWidth) },
+        { "line-blur-transition", static_cast<uint8_t>(Property::LineBlurTransition) },
+        { "line-color-transition", static_cast<uint8_t>(Property::LineColorTransition) },
+        { "line-dasharray-transition", static_cast<uint8_t>(Property::LineDasharrayTransition) },
+        { "line-gap-width-transition", static_cast<uint8_t>(Property::LineGapWidthTransition) },
+        { "line-gradient-transition", static_cast<uint8_t>(Property::LineGradientTransition) },
+        { "line-offset-transition", static_cast<uint8_t>(Property::LineOffsetTransition) },
+        { "line-opacity-transition", static_cast<uint8_t>(Property::LineOpacityTransition) },
+        { "line-pattern-transition", static_cast<uint8_t>(Property::LinePatternTransition) },
+        { "line-translate-transition", static_cast<uint8_t>(Property::LineTranslateTransition) },
+        { "line-translate-anchor-transition", static_cast<uint8_t>(Property::LineTranslateAnchorTransition) },
+        { "line-width-transition", static_cast<uint8_t>(Property::LineWidthTransition) }
+    });
 
-    if (property == Property::Unknown) {
+    const auto it = properties.find(name.c_str());
+    if (it == properties.end()) {
         return Error { "layer doesn't support this property" };
     }
 
+    auto property = static_cast<Property>(it->second);
+
         
-    if (property == Property::LineOpacity || property == Property::LineWidth || property == Property::LineGapWidth || property == Property::LineOffset || property == Property::LineBlur) {
+    if (property == Property::LineBlur || property == Property::LineGapWidth || property == Property::LineOffset || property == Property::LineOpacity || property == Property::LineWidth) {
         Error error;
         optional<PropertyValue<float>> typedValue = convert<PropertyValue<float>>(value, error, true, false);
         if (!typedValue) {
             return error;
         }
         
-        if (property == Property::LineOpacity) {
-            setLineOpacity(*typedValue);
-            return nullopt;
-        }
-        
-        if (property == Property::LineWidth) {
-            setLineWidth(*typedValue);
+        if (property == Property::LineBlur) {
+            setLineBlur(*typedValue);
             return nullopt;
         }
         
@@ -601,8 +508,13 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
             return nullopt;
         }
         
-        if (property == Property::LineBlur) {
-            setLineBlur(*typedValue);
+        if (property == Property::LineOpacity) {
+            setLineOpacity(*typedValue);
+            return nullopt;
+        }
+        
+        if (property == Property::LineWidth) {
+            setLineWidth(*typedValue);
             return nullopt;
         }
         
@@ -616,6 +528,42 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
         }
         
         setLineColor(*typedValue);
+        return nullopt;
+        
+    }
+    
+    if (property == Property::LineDasharray) {
+        Error error;
+        optional<PropertyValue<std::vector<float>>> typedValue = convert<PropertyValue<std::vector<float>>>(value, error, false, false);
+        if (!typedValue) {
+            return error;
+        }
+        
+        setLineDasharray(*typedValue);
+        return nullopt;
+        
+    }
+    
+    if (property == Property::LineGradient) {
+        Error error;
+        optional<ColorRampPropertyValue> typedValue = convert<ColorRampPropertyValue>(value, error, false, false);
+        if (!typedValue) {
+            return error;
+        }
+        
+        setLineGradient(*typedValue);
+        return nullopt;
+        
+    }
+    
+    if (property == Property::LinePattern) {
+        Error error;
+        optional<PropertyValue<std::string>> typedValue = convert<PropertyValue<std::string>>(value, error, true, false);
+        if (!typedValue) {
+            return error;
+        }
+        
+        setLinePattern(*typedValue);
         return nullopt;
         
     }
@@ -644,42 +592,6 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
         
     }
     
-    if (property == Property::LineDasharray) {
-        Error error;
-        optional<PropertyValue<std::vector<float>>> typedValue = convert<PropertyValue<std::vector<float>>>(value, error, false, false);
-        if (!typedValue) {
-            return error;
-        }
-        
-        setLineDasharray(*typedValue);
-        return nullopt;
-        
-    }
-    
-    if (property == Property::LinePattern) {
-        Error error;
-        optional<PropertyValue<std::string>> typedValue = convert<PropertyValue<std::string>>(value, error, true, false);
-        if (!typedValue) {
-            return error;
-        }
-        
-        setLinePattern(*typedValue);
-        return nullopt;
-        
-    }
-    
-    if (property == Property::LineGradient) {
-        Error error;
-        optional<ColorRampPropertyValue> typedValue = convert<ColorRampPropertyValue>(value, error, false, false);
-        if (!typedValue) {
-            return error;
-        }
-        
-        setLineGradient(*typedValue);
-        return nullopt;
-        
-    }
-    
 
     Error error;
     optional<TransitionOptions> transition = convert<TransitionOptions>(value, error);
@@ -687,13 +599,43 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
         return error;
     }
     
-    if (property == Property::LineOpacityTransition) {
-        setLineOpacityTransition(*transition);
+    if (property == Property::LineBlurTransition) {
+        setLineBlurTransition(*transition);
         return nullopt;
     }
     
     if (property == Property::LineColorTransition) {
         setLineColorTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LineDasharrayTransition) {
+        setLineDasharrayTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LineGapWidthTransition) {
+        setLineGapWidthTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LineGradientTransition) {
+        setLineGradientTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LineOffsetTransition) {
+        setLineOffsetTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LineOpacityTransition) {
+        setLineOpacityTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::LinePatternTransition) {
+        setLinePatternTransition(*transition);
         return nullopt;
     }
     
@@ -712,36 +654,6 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
         return nullopt;
     }
     
-    if (property == Property::LineGapWidthTransition) {
-        setLineGapWidthTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::LineOffsetTransition) {
-        setLineOffsetTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::LineBlurTransition) {
-        setLineBlurTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::LineDasharrayTransition) {
-        setLineDasharrayTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::LinePatternTransition) {
-        setLinePatternTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::LineGradientTransition) {
-        setLineGradientTransition(*transition);
-        return nullopt;
-    }
-    
 
     return Error { "layer doesn't support this property" };
 }
@@ -750,47 +662,25 @@ optional<Error> LineLayer::setLayoutProperty(const std::string& name, const Conv
     if (name == "visibility") {
         return Layer::setVisibility(value);
     }
-
     enum class Property {
-        Unknown,
         LineCap,
         LineJoin,
         LineMiterLimit,
         LineRoundLimit,
     };
+    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
+        { "line-cap", static_cast<uint8_t>(Property::LineCap) },
+        { "line-join", static_cast<uint8_t>(Property::LineJoin) },
+        { "line-miter-limit", static_cast<uint8_t>(Property::LineMiterLimit) },
+        { "line-round-limit", static_cast<uint8_t>(Property::LineRoundLimit) }
+    });
 
-    Property property = Property::Unknown;
-    switch (util::hashFNV1a(name.c_str())) {
-    
-    case util::hashFNV1a("line-cap"):
-        if (name == "line-cap") {
-            property = Property::LineCap;
-        }
-        break;
-    
-    case util::hashFNV1a("line-join"):
-        if (name == "line-join") {
-            property = Property::LineJoin;
-        }
-        break;
-    
-    case util::hashFNV1a("line-miter-limit"):
-        if (name == "line-miter-limit") {
-            property = Property::LineMiterLimit;
-        }
-        break;
-    
-    case util::hashFNV1a("line-round-limit"):
-        if (name == "line-round-limit") {
-            property = Property::LineRoundLimit;
-        }
-        break;
-    
-    }
-
-    if (property == Property::Unknown) {
+    const auto it = properties.find(name.c_str());
+    if (it == properties.end()) {
         return Error { "layer doesn't support this property" };
     }
+
+    auto property = static_cast<Property>(it->second);
 
         
     if (property == Property::LineCap) {
@@ -845,27 +735,4 @@ Mutable<Layer::Impl> LineLayer::mutableBaseImpl() const {
 }
 
 } // namespace style
-
-const style::LayerTypeInfo* LineLayerFactory::getTypeInfo() const noexcept {
-    return style::LineLayer::Impl::staticTypeInfo();
-}
-
-std::unique_ptr<style::Layer> LineLayerFactory::createLayer(const std::string& id, const style::conversion::Convertible& value) noexcept {
-    optional<std::string> source = getSource(value);
-    if (!source) {
-        return nullptr;
-    }
-
-    std::unique_ptr<style::Layer> layer = std::unique_ptr<style::Layer>(new style::LineLayer(id, *source));
-    if (!initSourceLayerAndFilter(layer.get(), value)) {
-        return nullptr;
-    }
-    return layer;
-}
-
-std::unique_ptr<RenderLayer> LineLayerFactory::createRenderLayer(Immutable<style::Layer::Impl> impl) noexcept {
-    assert(impl->getTypeInfo() == getTypeInfo());
-    return std::make_unique<RenderLineLayer>(staticImmutableCast<style::LineLayer::Impl>(std::move(impl)));
-}
-
 } // namespace mbgl

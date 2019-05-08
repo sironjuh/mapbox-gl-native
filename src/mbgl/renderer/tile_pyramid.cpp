@@ -61,7 +61,7 @@ Tile* TilePyramid::getTile(const OverscaledTileID& tileID){
         return it == tiles.end() ? cache.get(tileID) : it->second.get();
 }
 
-void TilePyramid::update(const std::vector<Immutable<style::Layer::Impl>>& layers,
+void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& layers,
                          const bool needsRendering,
                          const bool needsRelayout,
                          const TileParameters& parameters,
@@ -177,7 +177,7 @@ void TilePyramid::update(const std::vector<Immutable<style::Layer::Impl>>& layer
     }
 
     auto renderTileFn = [&](const UnwrappedTileID& tileID, Tile& tile) {
-        renderTiles.emplace_back(tileID, tile);
+        addRenderTile(tileID, tile);
         rendered.emplace(tileID);
         previouslyRenderedTiles.erase(tileID); // Still rendering this tile, no need for special fading logic.
         tile.markRenderedIdeal();
@@ -200,7 +200,7 @@ void TilePyramid::update(const std::vector<Immutable<style::Layer::Impl>>& layer
             // Since it was rendered in the last frame, we know we have it
             // Don't mark the tile "Required" to avoid triggering a new network request
             retainTileFn(tile, TileNecessity::Optional);
-            renderTiles.emplace_back(previouslyRenderedTile.first, tile);
+            addRenderTile(previouslyRenderedTile.first, tile);
             rendered.emplace(previouslyRenderedTile.first);
         }
     }
@@ -237,6 +237,26 @@ void TilePyramid::update(const std::vector<Immutable<style::Layer::Impl>>& layer
 
     for (auto& pair : tiles) {
         pair.second->setShowCollisionBoxes(parameters.debugOptions & MapDebugOptions::Collision);
+    }
+
+    // Initialize render tiles fields and update the tile contained layer render data.
+    for (RenderTile& renderTile : renderTiles) {
+        Tile& tile = renderTile.tile;
+        if (!tile.isRenderable()) continue;
+
+        const bool holdForFade = tile.holdForFade();
+        for (const auto& layerProperties : layers) {
+            const auto* typeInfo = layerProperties->baseImpl->getTypeInfo();
+            if (holdForFade && typeInfo->fadingTiles == LayerTypeInfo::FadingTiles::NotRequired) {
+                continue;
+            }
+            // Update layer properties for complete tiles; for incomplete just check the presence.
+            bool layerRenderableInTile = tile.isComplete() ? tile.updateLayerProperties(layerProperties)
+                                                           : static_cast<bool>(tile.getBucket(*layerProperties->baseImpl));
+            if (layerRenderableInTile) {
+                renderTile.used = true;
+            }
+        }
     }
 }
 
@@ -296,7 +316,7 @@ std::unordered_map<std::string, std::vector<Feature>> TilePyramid::queryRendered
     }
 
     mapbox::geometry::box<double> box = mapbox::geometry::envelope(queryGeometry);
-
+    // TODO: Find out why we need a special sorting algorithm here.
     std::vector<std::reference_wrapper<const RenderTile>> sortedTiles{ renderTiles.begin(),
                                                                        renderTiles.end() };
     std::sort(sortedTiles.begin(), sortedTiles.end(), [](const RenderTile& a, const RenderTile& b) {
@@ -363,6 +383,18 @@ void TilePyramid::dumpDebugLogs() const {
     for (const auto& pair : tiles) {
         pair.second->dumpDebugLogs();
     }
+}
+
+void TilePyramid::clearAll() {
+    tiles.clear();
+    renderTiles.clear();
+    cache.clear();
+}
+
+void TilePyramid::addRenderTile(const UnwrappedTileID& tileID, Tile& tile) {
+    auto it = std::lower_bound(renderTiles.begin(), renderTiles.end(), tileID,
+        [](const RenderTile& a, const UnwrappedTileID& id) { return a.id < id; });
+    renderTiles.emplace(it, tileID, tile);
 }
 
 } // namespace mbgl

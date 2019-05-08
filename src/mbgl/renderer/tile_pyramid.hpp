@@ -5,7 +5,7 @@
 #include <mbgl/tile/tile.hpp>
 #include <mbgl/tile/tile_cache.hpp>
 #include <mbgl/style/types.hpp>
-#include <mbgl/style/layer_impl.hpp>
+#include <mbgl/style/layer_properties.hpp>
 
 #include <mbgl/util/mat4.hpp>
 #include <mbgl/util/feature.hpp>
@@ -33,7 +33,7 @@ public:
 
     bool isLoaded() const;
 
-    void update(const std::vector<Immutable<style::Layer::Impl>>&,
+    void update(const std::vector<Immutable<style::LayerProperties>>& visibleLayers,
                 bool needsRendering,
                 bool needsRelayout,
                 const TileParameters&,
@@ -66,12 +66,16 @@ public:
     void setObserver(TileObserver*);
     void dumpDebugLogs() const;
 
-    bool enabled = false;
+    const std::map<OverscaledTileID, std::unique_ptr<Tile>>& getTiles() const { return tiles; }
+    void clearAll();
+
+private:
+    void addRenderTile(const UnwrappedTileID& tileID, Tile& tile);
 
     std::map<OverscaledTileID, std::unique_ptr<Tile>> tiles;
     TileCache cache;
 
-    std::vector<RenderTile> renderTiles;
+    std::list<RenderTile> renderTiles;
 
     TileObserver* observer = nullptr;
 

@@ -2,7 +2,6 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion androidVersions.compileSdkVersion
-    buildToolsVersion androidVersions.buildToolsVersion
 
     defaultConfig {
         applicationId "com.mapbox.mapboxsdk.testapp"
@@ -10,7 +9,7 @@ android {
         targetSdkVersion androidVersions.targetSdkVersion
         versionCode 13
         versionName "6.0.0"
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner "com.mapbox.mapboxsdk.InstrumentationRunner"
     }
 
     compileOptions {
@@ -57,8 +56,8 @@ android {
 dependencies {
     implementation dependenciesList.kotlinLib
 
-    implementation(project(':MapboxGLAndroidSDK'))
-    implementation(dependenciesList.mapboxJavaTurf)
+    implementation project(':MapboxGLAndroidSDK')
+    implementation dependenciesList.mapboxJavaTurf
 
     implementation dependenciesList.supportAppcompatV7
     implementation dependenciesList.supportRecyclerView
@@ -76,6 +75,7 @@ dependencies {
     androidTestImplementation dependenciesList.testEspressoCore
     androidTestImplementation dependenciesList.testEspressoIntents
     androidTestImplementation dependenciesList.testEspressoContrib
+    androidTestImplementation dependenciesList.testUiAutomator
 }
 
 apply from: "${rootDir}/gradle/gradle-make.gradle"

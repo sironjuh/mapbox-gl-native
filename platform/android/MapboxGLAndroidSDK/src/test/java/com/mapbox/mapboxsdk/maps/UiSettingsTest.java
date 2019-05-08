@@ -249,6 +249,26 @@ public class UiSettingsTest {
   }
 
   @Test
+  public void testQuickZoomGesturesEnabled() {
+    uiSettings.setQuickZoomGesturesEnabled(true);
+    assertEquals("QuickZoom gesture should be enabled", true, uiSettings.isQuickZoomGesturesEnabled());
+  }
+
+  @Test
+  public void testQuickZoomGesturesDisabled() {
+    uiSettings.setQuickZoomGesturesEnabled(false);
+    assertEquals("QuickZoom gesture should be disabled", false, uiSettings.isQuickZoomGesturesEnabled());
+  }
+
+  @Test
+  public void testQuickZoomGestureChangeAllowed() {
+    uiSettings.setQuickZoomGesturesEnabled(false);
+    assertEquals("QuickZoom gesture should be false", false, uiSettings.isQuickZoomGesturesEnabled());
+    uiSettings.setQuickZoomGesturesEnabled(true);
+    assertEquals("QuickZoom gesture should be true", true, uiSettings.isQuickZoomGesturesEnabled());
+  }
+
+  @Test
   public void testScrollGesturesEnabled() {
     uiSettings.setScrollGesturesEnabled(true);
     assertEquals("Scroll gesture should be enabled", true, uiSettings.isScrollGesturesEnabled());
@@ -363,5 +383,20 @@ public class UiSettingsTest {
     assertEquals("Tilt gesture should be disabled", false, uiSettings.isTiltGesturesEnabled());
     assertEquals("Zoom gesture should be disabled", false, uiSettings.isZoomGesturesEnabled());
     assertEquals("Scroll gesture should be disabled", false, uiSettings.isScrollGesturesEnabled());
+  }
+
+  @Test
+  public void testAreAllGesturesEnabled() {
+    uiSettings.setAllGesturesEnabled(true);
+    assertEquals("All gestures check should return true", true,
+        uiSettings.areAllGesturesEnabled());
+  }
+
+  @Test
+  public void testAreAllGesturesEnabledWithOneGestureDisabled() {
+    uiSettings.setAllGesturesEnabled(true);
+    uiSettings.setScrollGesturesEnabled(false);
+    assertEquals("All gestures check should return false", false,
+        uiSettings.areAllGesturesEnabled());
   }
 }

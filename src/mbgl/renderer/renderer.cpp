@@ -1,23 +1,26 @@
 #include <mbgl/renderer/renderer.hpp>
+
+#include <mbgl/layermanager/layer_manager.hpp>
 #include <mbgl/renderer/renderer_impl.hpp>
-#include <mbgl/renderer/backend_scope.hpp>
+#include <mbgl/gfx/backend_scope.hpp>
 #include <mbgl/annotation/annotation_manager.hpp>
 
 namespace mbgl {
 
-Renderer::Renderer(RendererBackend& backend,
+Renderer::Renderer(gfx::RendererBackend& backend,
                    float pixelRatio_,
-                   FileSource& fileSource_,
                    Scheduler& scheduler_,
-                   GLContextMode contextMode_,
                    const optional<std::string> programCacheDir_,
                    const optional<std::string> localFontFamily_)
-        : impl(std::make_unique<Impl>(backend, pixelRatio_, fileSource_, scheduler_,
-                                      contextMode_, std::move(programCacheDir_), std::move(localFontFamily_))) {
+    : impl(std::make_unique<Impl>(backend,
+                                  pixelRatio_,
+                                  scheduler_,
+                                  std::move(programCacheDir_),
+                                  std::move(localFontFamily_))) {
 }
 
 Renderer::~Renderer() {
-    BackendScope guard { impl->backend };
+    gfx::BackendScope guard { impl->backend };
     impl.reset();
 }
 
@@ -98,12 +101,20 @@ std::vector<Feature> Renderer::querySourceFeatures(const std::string& sourceID, 
     return impl->querySourceFeatures(sourceID, options);
 }
 
+FeatureExtensionValue Renderer::queryFeatureExtensions(const std::string& sourceID,
+                                                       const Feature& feature,
+                                                       const std::string& extension,
+                                                       const std::string& extensionField,
+                                                       const optional<std::map<std::string, Value>>& args) const {
+    return impl->queryFeatureExtensions(sourceID, feature, extension, extensionField, args);
+}
+
 void Renderer::dumpDebugLogs() {
-    impl->dumDebugLogs();
+    impl->dumpDebugLogs();
 }
 
 void Renderer::reduceMemoryUse() {
-    BackendScope guard { impl->backend };
+    gfx::BackendScope guard { impl->backend };
     impl->reduceMemoryUse();
 }
 

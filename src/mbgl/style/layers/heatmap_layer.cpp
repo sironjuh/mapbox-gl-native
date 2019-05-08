@@ -9,9 +9,8 @@
 #include <mbgl/style/conversion/transition_options.hpp>
 #include <mbgl/style/conversion/json.hpp>
 #include <mbgl/style/conversion_impl.hpp>
-#include <mbgl/util/fnv_hash.hpp>
 
-#include <mbgl/renderer/layers/render_heatmap_layer.hpp>
+#include <mapbox/eternal.hpp>
 
 namespace mbgl {
 namespace style {
@@ -24,7 +23,7 @@ const LayerTypeInfo* HeatmapLayer::Impl::staticTypeInfo() noexcept {
           LayerTypeInfo::Source::Required,
           LayerTypeInfo::Pass3D::Required,
           LayerTypeInfo::Layout::NotRequired,
-          LayerTypeInfo::Clipping::NotRequired
+          LayerTypeInfo::FadingTiles::NotRequired
         };
     return &typeInfo;
 }
@@ -63,15 +62,98 @@ void HeatmapLayer::Impl::stringifyLayout(rapidjson::Writer<rapidjson::StringBuff
 
 // Paint properties
 
+ColorRampPropertyValue HeatmapLayer::getDefaultHeatmapColor() {
+    conversion::Error error;
+    std::string rawValue = R"JSON(["interpolate",["linear"],["heatmap-density"],0,"rgba(0, 0, 255, 0)",0.1,"royalblue",0.3,"cyan",0.5,"lime",0.7,"yellow",1,"red"])JSON";
+    return *conversion::convertJSON<ColorRampPropertyValue>(rawValue, error);
+}
+
+const ColorRampPropertyValue& HeatmapLayer::getHeatmapColor() const {
+    return impl().paint.template get<HeatmapColor>().value;
+}
+
+void HeatmapLayer::setHeatmapColor(const ColorRampPropertyValue& value) {
+    if (value == getHeatmapColor())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapColor>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void HeatmapLayer::setHeatmapColorTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapColor>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions HeatmapLayer::getHeatmapColorTransition() const {
+    return impl().paint.template get<HeatmapColor>().options;
+}
+
+PropertyValue<float> HeatmapLayer::getDefaultHeatmapIntensity() {
+    return { 1 };
+}
+
+const PropertyValue<float>& HeatmapLayer::getHeatmapIntensity() const {
+    return impl().paint.template get<HeatmapIntensity>().value;
+}
+
+void HeatmapLayer::setHeatmapIntensity(const PropertyValue<float>& value) {
+    if (value == getHeatmapIntensity())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapIntensity>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void HeatmapLayer::setHeatmapIntensityTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapIntensity>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions HeatmapLayer::getHeatmapIntensityTransition() const {
+    return impl().paint.template get<HeatmapIntensity>().options;
+}
+
+PropertyValue<float> HeatmapLayer::getDefaultHeatmapOpacity() {
+    return { 1 };
+}
+
+const PropertyValue<float>& HeatmapLayer::getHeatmapOpacity() const {
+    return impl().paint.template get<HeatmapOpacity>().value;
+}
+
+void HeatmapLayer::setHeatmapOpacity(const PropertyValue<float>& value) {
+    if (value == getHeatmapOpacity())
+        return;
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapOpacity>().value = value;
+    baseImpl = std::move(impl_);
+    observer->onLayerChanged(*this);
+}
+
+void HeatmapLayer::setHeatmapOpacityTransition(const TransitionOptions& options) {
+    auto impl_ = mutableImpl();
+    impl_->paint.template get<HeatmapOpacity>().options = options;
+    baseImpl = std::move(impl_);
+}
+
+TransitionOptions HeatmapLayer::getHeatmapOpacityTransition() const {
+    return impl().paint.template get<HeatmapOpacity>().options;
+}
+
 PropertyValue<float> HeatmapLayer::getDefaultHeatmapRadius() {
     return { 30 };
 }
 
-PropertyValue<float> HeatmapLayer::getHeatmapRadius() const {
+const PropertyValue<float>& HeatmapLayer::getHeatmapRadius() const {
     return impl().paint.template get<HeatmapRadius>().value;
 }
 
-void HeatmapLayer::setHeatmapRadius(PropertyValue<float> value) {
+void HeatmapLayer::setHeatmapRadius(const PropertyValue<float>& value) {
     if (value == getHeatmapRadius())
         return;
     auto impl_ = mutableImpl();
@@ -94,11 +176,11 @@ PropertyValue<float> HeatmapLayer::getDefaultHeatmapWeight() {
     return { 1 };
 }
 
-PropertyValue<float> HeatmapLayer::getHeatmapWeight() const {
+const PropertyValue<float>& HeatmapLayer::getHeatmapWeight() const {
     return impl().paint.template get<HeatmapWeight>().value;
 }
 
-void HeatmapLayer::setHeatmapWeight(PropertyValue<float> value) {
+void HeatmapLayer::setHeatmapWeight(const PropertyValue<float>& value) {
     if (value == getHeatmapWeight())
         return;
     auto impl_ = mutableImpl();
@@ -117,182 +199,52 @@ TransitionOptions HeatmapLayer::getHeatmapWeightTransition() const {
     return impl().paint.template get<HeatmapWeight>().options;
 }
 
-PropertyValue<float> HeatmapLayer::getDefaultHeatmapIntensity() {
-    return { 1 };
-}
-
-PropertyValue<float> HeatmapLayer::getHeatmapIntensity() const {
-    return impl().paint.template get<HeatmapIntensity>().value;
-}
-
-void HeatmapLayer::setHeatmapIntensity(PropertyValue<float> value) {
-    if (value == getHeatmapIntensity())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapIntensity>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void HeatmapLayer::setHeatmapIntensityTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapIntensity>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions HeatmapLayer::getHeatmapIntensityTransition() const {
-    return impl().paint.template get<HeatmapIntensity>().options;
-}
-
-ColorRampPropertyValue HeatmapLayer::getDefaultHeatmapColor() {
-    conversion::Error error;
-    std::string rawValue = R"JSON(["interpolate",["linear"],["heatmap-density"],0,"rgba(0, 0, 255, 0)",0.1,"royalblue",0.3,"cyan",0.5,"lime",0.7,"yellow",1,"red"])JSON";
-    return *conversion::convertJSON<ColorRampPropertyValue>(rawValue, error);
-}
-
-ColorRampPropertyValue HeatmapLayer::getHeatmapColor() const {
-    return impl().paint.template get<HeatmapColor>().value;
-}
-
-void HeatmapLayer::setHeatmapColor(ColorRampPropertyValue value) {
-    if (value == getHeatmapColor())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapColor>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void HeatmapLayer::setHeatmapColorTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapColor>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions HeatmapLayer::getHeatmapColorTransition() const {
-    return impl().paint.template get<HeatmapColor>().options;
-}
-
-PropertyValue<float> HeatmapLayer::getDefaultHeatmapOpacity() {
-    return { 1 };
-}
-
-PropertyValue<float> HeatmapLayer::getHeatmapOpacity() const {
-    return impl().paint.template get<HeatmapOpacity>().value;
-}
-
-void HeatmapLayer::setHeatmapOpacity(PropertyValue<float> value) {
-    if (value == getHeatmapOpacity())
-        return;
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapOpacity>().value = value;
-    baseImpl = std::move(impl_);
-    observer->onLayerChanged(*this);
-}
-
-void HeatmapLayer::setHeatmapOpacityTransition(const TransitionOptions& options) {
-    auto impl_ = mutableImpl();
-    impl_->paint.template get<HeatmapOpacity>().options = options;
-    baseImpl = std::move(impl_);
-}
-
-TransitionOptions HeatmapLayer::getHeatmapOpacityTransition() const {
-    return impl().paint.template get<HeatmapOpacity>().options;
-}
-
 using namespace conversion;
 
 optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Convertible& value) {
-    enum class Property {
-        Unknown,
+    enum class Property : uint8_t {
+        HeatmapColor,
+        HeatmapIntensity,
+        HeatmapOpacity,
         HeatmapRadius,
         HeatmapWeight,
-        HeatmapIntensity,
-        HeatmapColor,
-        HeatmapOpacity,
+        HeatmapColorTransition,
+        HeatmapIntensityTransition,
+        HeatmapOpacityTransition,
         HeatmapRadiusTransition,
         HeatmapWeightTransition,
-        HeatmapIntensityTransition,
-        HeatmapColorTransition,
-        HeatmapOpacityTransition,
     };
 
-    Property property = Property::Unknown;
-    switch (util::hashFNV1a(name.c_str())) {
-    case util::hashFNV1a("heatmap-radius"):
-        if (name == "heatmap-radius") {
-            property = Property::HeatmapRadius;
-        }
-        break;
-    case util::hashFNV1a("heatmap-radius-transition"):
-        if (name == "heatmap-radius-transition") {
-            property = Property::HeatmapRadiusTransition;
-        }
-        break;
-    case util::hashFNV1a("heatmap-weight"):
-        if (name == "heatmap-weight") {
-            property = Property::HeatmapWeight;
-        }
-        break;
-    case util::hashFNV1a("heatmap-weight-transition"):
-        if (name == "heatmap-weight-transition") {
-            property = Property::HeatmapWeightTransition;
-        }
-        break;
-    case util::hashFNV1a("heatmap-intensity"):
-        if (name == "heatmap-intensity") {
-            property = Property::HeatmapIntensity;
-        }
-        break;
-    case util::hashFNV1a("heatmap-intensity-transition"):
-        if (name == "heatmap-intensity-transition") {
-            property = Property::HeatmapIntensityTransition;
-        }
-        break;
-    case util::hashFNV1a("heatmap-color"):
-        if (name == "heatmap-color") {
-            property = Property::HeatmapColor;
-        }
-        break;
-    case util::hashFNV1a("heatmap-color-transition"):
-        if (name == "heatmap-color-transition") {
-            property = Property::HeatmapColorTransition;
-        }
-        break;
-    case util::hashFNV1a("heatmap-opacity"):
-        if (name == "heatmap-opacity") {
-            property = Property::HeatmapOpacity;
-        }
-        break;
-    case util::hashFNV1a("heatmap-opacity-transition"):
-        if (name == "heatmap-opacity-transition") {
-            property = Property::HeatmapOpacityTransition;
-        }
-        break;
-    
-    }
+    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
+        { "heatmap-color", static_cast<uint8_t>(Property::HeatmapColor) },
+        { "heatmap-intensity", static_cast<uint8_t>(Property::HeatmapIntensity) },
+        { "heatmap-opacity", static_cast<uint8_t>(Property::HeatmapOpacity) },
+        { "heatmap-radius", static_cast<uint8_t>(Property::HeatmapRadius) },
+        { "heatmap-weight", static_cast<uint8_t>(Property::HeatmapWeight) },
+        { "heatmap-color-transition", static_cast<uint8_t>(Property::HeatmapColorTransition) },
+        { "heatmap-intensity-transition", static_cast<uint8_t>(Property::HeatmapIntensityTransition) },
+        { "heatmap-opacity-transition", static_cast<uint8_t>(Property::HeatmapOpacityTransition) },
+        { "heatmap-radius-transition", static_cast<uint8_t>(Property::HeatmapRadiusTransition) },
+        { "heatmap-weight-transition", static_cast<uint8_t>(Property::HeatmapWeightTransition) }
+    });
 
-    if (property == Property::Unknown) {
+    const auto it = properties.find(name.c_str());
+    if (it == properties.end()) {
         return Error { "layer doesn't support this property" };
     }
 
+    auto property = static_cast<Property>(it->second);
+
         
-    if (property == Property::HeatmapRadius || property == Property::HeatmapWeight) {
+    if (property == Property::HeatmapColor) {
         Error error;
-        optional<PropertyValue<float>> typedValue = convert<PropertyValue<float>>(value, error, true, false);
+        optional<ColorRampPropertyValue> typedValue = convert<ColorRampPropertyValue>(value, error, false, false);
         if (!typedValue) {
             return error;
         }
         
-        if (property == Property::HeatmapRadius) {
-            setHeatmapRadius(*typedValue);
-            return nullopt;
-        }
-        
-        if (property == Property::HeatmapWeight) {
-            setHeatmapWeight(*typedValue);
-            return nullopt;
-        }
+        setHeatmapColor(*typedValue);
+        return nullopt;
         
     }
     
@@ -315,15 +267,22 @@ optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Co
         
     }
     
-    if (property == Property::HeatmapColor) {
+    if (property == Property::HeatmapRadius || property == Property::HeatmapWeight) {
         Error error;
-        optional<ColorRampPropertyValue> typedValue = convert<ColorRampPropertyValue>(value, error, false, false);
+        optional<PropertyValue<float>> typedValue = convert<PropertyValue<float>>(value, error, true, false);
         if (!typedValue) {
             return error;
         }
         
-        setHeatmapColor(*typedValue);
-        return nullopt;
+        if (property == Property::HeatmapRadius) {
+            setHeatmapRadius(*typedValue);
+            return nullopt;
+        }
+        
+        if (property == Property::HeatmapWeight) {
+            setHeatmapWeight(*typedValue);
+            return nullopt;
+        }
         
     }
     
@@ -332,6 +291,21 @@ optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Co
     optional<TransitionOptions> transition = convert<TransitionOptions>(value, error);
     if (!transition) {
         return error;
+    }
+    
+    if (property == Property::HeatmapColorTransition) {
+        setHeatmapColorTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::HeatmapIntensityTransition) {
+        setHeatmapIntensityTransition(*transition);
+        return nullopt;
+    }
+    
+    if (property == Property::HeatmapOpacityTransition) {
+        setHeatmapOpacityTransition(*transition);
+        return nullopt;
     }
     
     if (property == Property::HeatmapRadiusTransition) {
@@ -344,21 +318,6 @@ optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Co
         return nullopt;
     }
     
-    if (property == Property::HeatmapIntensityTransition) {
-        setHeatmapIntensityTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::HeatmapColorTransition) {
-        setHeatmapColorTransition(*transition);
-        return nullopt;
-    }
-    
-    if (property == Property::HeatmapOpacityTransition) {
-        setHeatmapOpacityTransition(*transition);
-        return nullopt;
-    }
-    
 
     return Error { "layer doesn't support this property" };
 }
@@ -368,21 +327,6 @@ optional<Error> HeatmapLayer::setLayoutProperty(const std::string& name, const C
         return Layer::setVisibility(value);
     }
 
-    enum class Property {
-        Unknown,
-    };
-
-    Property property = Property::Unknown;
-    switch (util::hashFNV1a(name.c_str())) {
-    
-    }
-
-    if (property == Property::Unknown) {
-        return Error { "layer doesn't support this property" };
-    }
-
-        
-
     return Error { "layer doesn't support this property" };
 }
 
@@ -391,27 +335,4 @@ Mutable<Layer::Impl> HeatmapLayer::mutableBaseImpl() const {
 }
 
 } // namespace style
-
-const style::LayerTypeInfo* HeatmapLayerFactory::getTypeInfo() const noexcept {
-    return style::HeatmapLayer::Impl::staticTypeInfo();
-}
-
-std::unique_ptr<style::Layer> HeatmapLayerFactory::createLayer(const std::string& id, const style::conversion::Convertible& value) noexcept {
-    optional<std::string> source = getSource(value);
-    if (!source) {
-        return nullptr;
-    }
-
-    std::unique_ptr<style::Layer> layer = std::unique_ptr<style::Layer>(new style::HeatmapLayer(id, *source));
-    if (!initSourceLayerAndFilter(layer.get(), value)) {
-        return nullptr;
-    }
-    return layer;
-}
-
-std::unique_ptr<RenderLayer> HeatmapLayerFactory::createRenderLayer(Immutable<style::Layer::Impl> impl) noexcept {
-    assert(impl->getTypeInfo() == getTypeInfo());
-    return std::make_unique<RenderHeatmapLayer>(staticImmutableCast<style::HeatmapLayer::Impl>(std::move(impl)));
-}
-
 } // namespace mbgl

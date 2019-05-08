@@ -2,8 +2,8 @@
 
 #include <mbgl/renderer/bucket.hpp>
 #include <mbgl/tile/geometry_tile_data.hpp>
-#include <mbgl/gl/vertex_buffer.hpp>
-#include <mbgl/gl/index_buffer.hpp>
+#include <mbgl/gfx/vertex_buffer.hpp>
+#include <mbgl/gfx/index_buffer.hpp>
 #include <mbgl/programs/segment.hpp>
 #include <mbgl/programs/fill_extrusion_program.hpp>
 #include <mbgl/style/layers/fill_extrusion_layer_properties.hpp>
@@ -13,16 +13,14 @@ namespace mbgl {
 class BucketParameters;
 class RenderFillExtrusionLayer;
 
-class FillExtrusionBucket : public Bucket {
+class FillExtrusionBucket final : public Bucket {
 public:
-
-    // These aliases are used by the PatternLayout template
-    using RenderLayerType = RenderFillExtrusionLayer;
+    ~FillExtrusionBucket() override;
     using PossiblyEvaluatedPaintProperties = style::FillExtrusionPaintProperties::PossiblyEvaluated;
     using PossiblyEvaluatedLayoutProperties = style::Properties<>::PossiblyEvaluated;
 
-    FillExtrusionBucket(const PossiblyEvaluatedLayoutProperties,
-                        std::map<std::string, PossiblyEvaluatedPaintProperties>,
+    FillExtrusionBucket(const PossiblyEvaluatedLayoutProperties&,
+                        const std::map<std::string, Immutable<style::LayerProperties>>&,
                         const float,
                         const uint32_t);
 
@@ -33,23 +31,20 @@ public:
 
     bool hasData() const override;
 
-    void upload(gl::Context&) override;
+    bool supportsLayer(const style::Layer::Impl&) const override;
+
+    void upload(gfx::Context&) override;
 
     float getQueryRadius(const RenderLayer&) const override;
 
-    gl::VertexVector<FillExtrusionLayoutVertex> vertices;
-    gl::IndexVector<gl::Triangles> triangles;
+    gfx::VertexVector<FillExtrusionLayoutVertex> vertices;
+    gfx::IndexVector<gfx::Triangles> triangles;
     SegmentVector<FillExtrusionAttributes> triangleSegments;
 
-    optional<gl::VertexBuffer<FillExtrusionLayoutVertex>> vertexBuffer;
-    optional<gl::IndexBuffer<gl::Triangles>> indexBuffer;
+    optional<gfx::VertexBuffer<FillExtrusionLayoutVertex>> vertexBuffer;
+    optional<gfx::IndexBuffer> indexBuffer;
     
-    std::unordered_map<std::string, FillExtrusionProgram::PaintPropertyBinders> paintPropertyBinders;
+    std::unordered_map<std::string, FillExtrusionProgram::Binders> paintPropertyBinders;
 };
-
-template <>
-inline bool Bucket::is<FillExtrusionBucket>() const {
-    return layerType == style::LayerType::FillExtrusion;
-}
 
 } // namespace mbgl

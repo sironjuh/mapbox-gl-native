@@ -28,20 +28,21 @@ using namespace style;
 struct GeometryTooLongException : std::exception {};
 
 FillBucket::FillBucket(const FillBucket::PossiblyEvaluatedLayoutProperties,
-                       std::map<std::string, FillBucket::PossiblyEvaluatedPaintProperties> layerPaintProperties,
+                       const std::map<std::string, Immutable<style::LayerProperties>>& layerPaintProperties,
                        const float zoom,
-                       const uint32_t)
-    : Bucket(LayerType::Fill) {
+                       const uint32_t) {
 
     for (const auto& pair : layerPaintProperties) {
         paintPropertyBinders.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(pair.first),
             std::forward_as_tuple(
-                pair.second,
+                getEvaluated<FillLayerProperties>(pair.second),
                 zoom));
     }
 }
+
+FillBucket::~FillBucket() = default;
 
 void FillBucket::addFeature(const GeometryTileFeature& feature,
                             const GeometryCollection& geometry,
@@ -59,7 +60,7 @@ void FillBucket::addFeature(const GeometryTileFeature& feature,
                 throw GeometryTooLongException();
         }
 
-        std::size_t startVertices = vertices.vertexSize();
+        std::size_t startVertices = vertices.elements();
 
         for (const auto& ring : polygon) {
             std::size_t nVertices = ring.size();
@@ -68,7 +69,7 @@ void FillBucket::addFeature(const GeometryTileFeature& feature,
                 continue;
 
             if (lineSegments.empty() || lineSegments.back().vertexLength + nVertices > std::numeric_limits<uint16_t>::max()) {
-                lineSegments.emplace_back(vertices.vertexSize(), lines.indexSize());
+                lineSegments.emplace_back(vertices.elements(), lines.elements());
             }
 
             auto& lineSegment = lineSegments.back();
@@ -93,7 +94,7 @@ void FillBucket::addFeature(const GeometryTileFeature& feature,
         assert(nIndicies % 3 == 0);
 
         if (triangleSegments.empty() || triangleSegments.back().vertexLength + totalVertices > std::numeric_limits<uint16_t>::max()) {
-            triangleSegments.emplace_back(startVertices, triangles.indexSize());
+            triangleSegments.emplace_back(startVertices, triangles.elements());
         }
 
         auto& triangleSegment = triangleSegments.back();
@@ -113,14 +114,14 @@ void FillBucket::addFeature(const GeometryTileFeature& feature,
     for (auto& pair : paintPropertyBinders) {
         const auto it = patternDependencies.find(pair.first);
         if (it != patternDependencies.end()){
-            pair.second.populateVertexVectors(feature, vertices.vertexSize(), patternPositions, it->second);
+            pair.second.populateVertexVectors(feature, vertices.elements(), patternPositions, it->second);
         } else {
-            pair.second.populateVertexVectors(feature, vertices.vertexSize(), patternPositions, {});
+            pair.second.populateVertexVectors(feature, vertices.elements(), patternPositions, {});
         }
     }
 }
 
-void FillBucket::upload(gl::Context& context) {
+void FillBucket::upload(gfx::Context& context) {
     vertexBuffer = context.createVertexBuffer(std::move(vertices));
     lineIndexBuffer = context.createIndexBuffer(std::move(lines));
     triangleIndexBuffer = context.createIndexBuffer(std::move(triangles));
@@ -136,9 +137,13 @@ bool FillBucket::hasData() const {
     return !triangleSegments.empty() || !lineSegments.empty();
 }
 
+bool FillBucket::supportsLayer(const style::Layer::Impl& impl) const {
+    return style::FillLayer::Impl::staticTypeInfo() == impl.getTypeInfo();
+}
+
 float FillBucket::getQueryRadius(const RenderLayer& layer) const {
-    const RenderFillLayer* fillLayer = toRenderFillLayer(&layer);
-    const std::array<float, 2>& translate = fillLayer->evaluated.get<FillTranslate>();
+    const auto& evaluated = getEvaluated<FillLayerProperties>(layer.evaluatedProperties);
+    const std::array<float, 2>& translate = evaluated.get<FillTranslate>();
     return util::length(translate[0], translate[1]);
 }
 

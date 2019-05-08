@@ -21,7 +21,7 @@ bool RenderRasterSource::isLoaded() const {
 }
 
 void RenderRasterSource::update(Immutable<style::Source::Impl> baseImpl_,
-                                const std::vector<Immutable<Layer::Impl>>& layers,
+                                const std::vector<Immutable<LayerProperties>>& layers,
                                 const bool needsRendering,
                                 const bool needsRelayout,
                                 const TileParameters& parameters) {
@@ -36,9 +36,7 @@ void RenderRasterSource::update(Immutable<style::Source::Impl> baseImpl_,
 
         // TODO: this removes existing buckets, and will cause flickering.
         // Should instead refresh tile data in place.
-        tilePyramid.tiles.clear();
-        tilePyramid.renderTiles.clear();
-        tilePyramid.cache.clear();
+        tilePyramid.clearAll();
     }
     // Allow clearing the tile pyramid first, before the early return in case
     //  the new tileset is not yet available or has an error in loading

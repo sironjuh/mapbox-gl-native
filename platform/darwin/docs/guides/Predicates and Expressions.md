@@ -120,7 +120,7 @@ dictionary contains the `floorCount` key, then the key path `floorCount` refers
 to the value of the `floorCount` attribute when evaluating that particular
 polygon.
 
-The following special attribute is also available on features that are produced
+The following special attributes are also available on features that are produced
 as a result of clustering multiple point features together in a shape source:
 
 <table>
@@ -128,6 +128,16 @@ as a result of clustering multiple point features together in a shape source:
 <tr><th>Attribute</th><th>Type</th><th>Meaning</th></tr>
 </thead>
 <tbody>
+<tr>
+   <td><code>cluster</code></td>
+   <td>Bool</td>
+   <td>True if the feature is a point cluster. If the attribute is false (or not present) then the  feature should not be considered a cluster.</td>
+</tr>
+<tr>
+   <td><code>cluster_id</code></td>
+   <td>Number</td>
+   <td>Identifier for the point cluster.</td>
+</tr>
 <tr>
    <td><code>point_count</code></td>
    <td>Number</td>
@@ -522,6 +532,30 @@ Returns the first non-`nil` value from an array of expressions.
 
 This function corresponds to the
 [`coalesce`](https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-coalesce)
+operator in the Mapbox Style Specification.
+
+### `mgl_attributed:`
+
+<dl>
+<dt>Selector:</dt>
+<dd><code>mgl_attributed:</code></dd>
+<dt>Format string syntax:</dt>
+<dd><code>mgl_attributed({x, y, z})</code></dd>
+</dl>
+
+Concatenates and returns the array of `MGLAttributedExpression` objects, for use 
+with the `MGLSymbolStyleLayer.text` property.
+
+`MGLAttributedExpression.attributes` valid attributes.
+
+ Key | Value Type
+ --- | ---
+ `MGLFontNamesAttribute` | An `NSExpression` evaluating to an `NSString` array.
+ `MGLFontScaleAttribute` | An `NSExpression` evaluating to an `NSNumber` value.
+ `MGLFontColorAttribute` | An `NSExpression` evaluating to an `UIColor` (iOS) or `NSColor` (macOS).
+
+This function corresponds to the
+[`format`](https://www.mapbox.com/mapbox-gl-js/style-spec/#expressions-types-format)
 operator in the Mapbox Style Specification.
 
 ### `MGL_LET`

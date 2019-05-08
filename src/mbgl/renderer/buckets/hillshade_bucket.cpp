@@ -2,21 +2,21 @@
 #include <mbgl/renderer/layers/render_hillshade_layer.hpp>
 #include <mbgl/programs/hillshade_program.hpp>
 #include <mbgl/programs/hillshade_prepare_program.hpp>
-#include <mbgl/gl/context.hpp>
+#include <mbgl/gfx/context.hpp>
 
 namespace mbgl {
 
 using namespace style;
 
 HillshadeBucket::HillshadeBucket(PremultipliedImage&& image_, Tileset::DEMEncoding encoding)
-    : Bucket(LayerType::Hillshade),
-      demdata(image_, encoding) {
+    : demdata(image_, encoding) {
 }
 
 HillshadeBucket::HillshadeBucket(DEMData&& demdata_)
-    : Bucket(LayerType::Hillshade),
-      demdata(std::move(demdata_)) {
+    : demdata(std::move(demdata_)) {
 }
+
+HillshadeBucket::~HillshadeBucket() = default;
 
 const DEMData& HillshadeBucket::getDEMData() const {
     return demdata;
@@ -26,7 +26,7 @@ DEMData& HillshadeBucket::getDEMData() {
     return demdata;
 }
 
-void HillshadeBucket::upload(gl::Context& context) {
+void HillshadeBucket::upload(gfx::Context& context) {
     if (!hasData()) {
         return;
     }
@@ -84,7 +84,7 @@ void HillshadeBucket::setMask(TileMask&& mask_) {
 
         if (segments.back().vertexLength + vertexLength > std::numeric_limits<uint16_t>::max()) {
             // Move to a new segments because the old one can't hold the geometry.
-            segments.emplace_back(vertices.vertexSize(), indices.indexSize());
+            segments.emplace_back(vertices.elements(), indices.elements());
         }
 
         vertices.emplace_back(
@@ -113,5 +113,10 @@ void HillshadeBucket::setMask(TileMask&& mask_) {
 bool HillshadeBucket::hasData() const {
     return demdata.getImage()->valid();
 }
+
+bool HillshadeBucket::supportsLayer(const style::Layer::Impl& impl) const {
+    return style::HillshadeLayer::Impl::staticTypeInfo() == impl.getTypeInfo();
+}
+
 
 } // namespace mbgl

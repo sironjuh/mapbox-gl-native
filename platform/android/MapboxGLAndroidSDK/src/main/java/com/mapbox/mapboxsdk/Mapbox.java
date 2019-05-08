@@ -2,8 +2,6 @@ package com.mapbox.mapboxsdk;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
@@ -34,9 +32,10 @@ public final class Mapbox {
   private Context context;
   @Nullable
   private String accessToken;
-  private Boolean connected;
   @Nullable
   private TelemetryDefinition telemetry;
+  @Nullable
+  private AccountsManager accounts;
 
   /**
    * Get an instance of Mapbox.
@@ -51,13 +50,15 @@ public final class Mapbox {
   @UiThread
   @NonNull
   public static synchronized Mapbox getInstance(@NonNull Context context, @Nullable String accessToken) {
-    ThreadUtils.checkThread("Mapbox");
+    ThreadUtils.init(context);
+    ThreadUtils.checkThread(TAG);
     if (INSTANCE == null) {
       Context appContext = context.getApplicationContext();
       FileSource.initializeFileDirsPaths(appContext);
       INSTANCE = new Mapbox(appContext, accessToken);
       if (isAccessTokenValid(accessToken)) {
         initializeTelemetry();
+        INSTANCE.accounts = new AccountsManager();
       }
       ConnectivityReceiver.instance(appContext);
     }
@@ -70,7 +71,7 @@ public final class Mapbox {
   }
 
   /**
-   * Access token for this application.
+   * Get the current active access token for this application.
    *
    * @return Mapbox access token
    */
@@ -78,6 +79,26 @@ public final class Mapbox {
   public static String getAccessToken() {
     validateMapbox();
     return INSTANCE.accessToken;
+  }
+
+  /**
+   * Set the current active accessToken.
+   */
+  public static void setAccessToken(String accessToken) {
+    validateMapbox();
+    INSTANCE.accessToken = accessToken;
+    FileSource.getInstance(getApplicationContext()).setAccessToken(accessToken);
+  }
+
+  /**
+   * Returns a SKU token, refreshed if necessary. This method is meant for internal SDK
+   * usage only.
+   *
+   * @return the SKU token
+   */
+  @Nullable
+  public static String getSkuToken() {
+    return INSTANCE.accounts.getSkuToken();
   }
 
   /**
@@ -100,8 +121,7 @@ public final class Mapbox {
    */
   public static synchronized void setConnected(Boolean connected) {
     validateMapbox();
-    // Connectivity state overridden by app
-    INSTANCE.connected = connected;
+    ConnectivityReceiver.instance(INSTANCE.context).setConnected(connected);
   }
 
   /**
@@ -112,14 +132,7 @@ public final class Mapbox {
    */
   public static synchronized Boolean isConnected() {
     validateMapbox();
-    if (INSTANCE.connected != null) {
-      // Connectivity state overridden by app
-      return INSTANCE.connected;
-    }
-
-    ConnectivityManager cm = (ConnectivityManager) INSTANCE.context.getSystemService(Context.CONNECTIVITY_SERVICE);
-    NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-    return (activeNetwork != null && activeNetwork.isConnected());
+    return ConnectivityReceiver.instance(INSTANCE.context).isConnected();
   }
 
   /**
@@ -180,5 +193,12 @@ public final class Mapbox {
 
     accessToken = accessToken.trim().toLowerCase(MapboxConstants.MAPBOX_LOCALE);
     return accessToken.length() != 0 && (accessToken.startsWith("pk.") || accessToken.startsWith("sk."));
+  }
+
+  /**
+   * Internal use. Check if the {@link Mapbox#INSTANCE} is present.
+   */
+  public static boolean hasInstance() {
+    return INSTANCE != null;
   }
 }

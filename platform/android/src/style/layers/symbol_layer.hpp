@@ -4,6 +4,7 @@
 
 #include "layer.hpp"
 #include "../transition_options.hpp"
+#include <mbgl/layermanager/symbol_layer_factory.hpp>
 #include <mbgl/style/layers/symbol_layer.hpp>
 #include <jni/jni.hpp>
 
@@ -30,6 +31,8 @@ public:
     jni::Local<jni::Object<jni::ObjectTag>> getSymbolSpacing(jni::JNIEnv&);
 
     jni::Local<jni::Object<jni::ObjectTag>> getSymbolAvoidEdges(jni::JNIEnv&);
+
+    jni::Local<jni::Object<jni::ObjectTag>> getSymbolSortKey(jni::JNIEnv&);
 
     jni::Local<jni::Object<jni::ObjectTag>> getSymbolZOrder(jni::JNIEnv&);
 
@@ -78,6 +81,10 @@ public:
     jni::Local<jni::Object<jni::ObjectTag>> getTextLetterSpacing(jni::JNIEnv&);
 
     jni::Local<jni::Object<jni::ObjectTag>> getTextJustify(jni::JNIEnv&);
+
+    jni::Local<jni::Object<jni::ObjectTag>> getTextRadialOffset(jni::JNIEnv&);
+
+    jni::Local<jni::Object<jni::ObjectTag>> getTextVariableAnchor(jni::JNIEnv&);
 
     jni::Local<jni::Object<jni::ObjectTag>> getTextAnchor(jni::JNIEnv&);
 

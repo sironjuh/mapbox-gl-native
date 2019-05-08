@@ -23,7 +23,7 @@ bool RenderRasterDEMSource::isLoaded() const {
 }
 
 void RenderRasterDEMSource::update(Immutable<style::Source::Impl> baseImpl_,
-                                const std::vector<Immutable<Layer::Impl>>& layers,
+                                const std::vector<Immutable<LayerProperties>>& layers,
                                 const bool needsRendering,
                                 const bool needsRelayout,
                                 const TileParameters& parameters) {
@@ -38,9 +38,7 @@ void RenderRasterDEMSource::update(Immutable<style::Source::Impl> baseImpl_,
         maxzoom = tileset->zoomRange.max;
         // TODO: this removes existing buckets, and will cause flickering.
         // Should instead refresh tile data in place.
-        tilePyramid.tiles.clear();
-        tilePyramid.renderTiles.clear();
-        tilePyramid.cache.clear();
+        tilePyramid.clearAll();
     }
     // Allow clearing the tile pyramid first, before the early return in case
     //  the new tileset is not yet available or has an error in loading
@@ -62,7 +60,7 @@ void RenderRasterDEMSource::update(Immutable<style::Source::Impl> baseImpl_,
 }
 
 void RenderRasterDEMSource::onTileChanged(Tile& tile){
-    RasterDEMTile& demtile = static_cast<RasterDEMTile&>(tile);
+    auto& demtile = static_cast<RasterDEMTile&>(tile);
 
     std::map<DEMTileNeighbors, DEMTileNeighbors> opposites = {
         { DEMTileNeighbors::Left, DEMTileNeighbors::Right },
@@ -106,13 +104,13 @@ void RenderRasterDEMSource::onTileChanged(Tile& tile){
         };
 
         for (uint8_t i = 0; i < 8; i++) {
-            DEMTileNeighbors mask = DEMTileNeighbors(std::pow(2,i));
+            auto mask = DEMTileNeighbors(std::pow(2,i));
             // only backfill if this neighbor has not been previously backfilled
             if ((demtile.neighboringTiles & mask) != mask) {
                 OverscaledTileID neighborid = getNeighbor(mask);
                 Tile* renderableNeighbor = tilePyramid.getTile(neighborid);
                 if (renderableNeighbor != nullptr && renderableNeighbor->isRenderable()) {
-                    RasterDEMTile& borderTile = static_cast<RasterDEMTile&>(*renderableNeighbor);
+                    auto& borderTile = static_cast<RasterDEMTile&>(*renderableNeighbor);
                     demtile.backfillBorder(borderTile, mask);
 
                     // if the border tile has not been backfilled by a previous instance of the main

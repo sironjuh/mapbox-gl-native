@@ -13,20 +13,20 @@ import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
 import android.support.v4.content.res.ResourcesCompat;
 import android.text.Html;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
 import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.R;
 import com.mapbox.mapboxsdk.attribution.AttributionLayout;
 import com.mapbox.mapboxsdk.attribution.AttributionMeasure;
 import com.mapbox.mapboxsdk.attribution.AttributionParser;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
-import com.mapbox.mapboxsdk.constants.Style;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
 import com.mapbox.mapboxsdk.log.Logger;
+import com.mapbox.mapboxsdk.maps.Style;
 import com.mapbox.mapboxsdk.maps.TelemetryDefinition;
 import com.mapbox.mapboxsdk.storage.FileSource;
 import com.mapbox.mapboxsdk.utils.ThreadUtils;
@@ -98,7 +98,8 @@ public class MapSnapshotter {
     private LatLngBounds region;
     private CameraPosition cameraPosition;
     private boolean showLogo = true;
-    private String localIdeographFontFamily;
+    private String localIdeographFontFamily = "sans-serif";
+    private String apiBaseUrl;
 
     /**
      * @param width  the width of the image
@@ -181,6 +182,7 @@ public class MapSnapshotter {
      * <p>
      * The font family argument is passed to {@link android.graphics.Typeface#create(String, int)}.
      * Default system fonts are defined in &#x27;/system/etc/fonts.xml&#x27;
+     * Default font for local ideograph font family is "sans-serif".
      *
      * @param fontFamily font family for local ideograph generation.
      * @return the mutated {@link Options}
@@ -188,6 +190,18 @@ public class MapSnapshotter {
     @NonNull
     public Options withLocalIdeographFontFamily(String fontFamily) {
       this.localIdeographFontFamily = fontFamily;
+      return this;
+    }
+
+    /**
+     * Specifies the URL used for API endpoint.
+     *
+     * @param apiBaseUrl The base of our API endpoint
+     * @return the mutated {@link Options}
+     */
+    @NonNull
+    public Options withApiBaseUrl(String apiBaseUrl) {
+      this.apiBaseUrl = apiBaseUrl;
       return this;
     }
 
@@ -236,12 +250,20 @@ public class MapSnapshotter {
     }
 
     /**
-     * @return the font family used for locally generating ideographs
+     * @return the font family used for locally generating ideographs,
+     * Default font for local ideograph font family is "sans-serif".
      */
     public String getLocalIdeographFontFamily() {
       return localIdeographFontFamily;
     }
 
+    /**
+     * @return The base of our API endpoint
+     */
+    @Nullable
+    public String getApiBaseUrl() {
+      return apiBaseUrl;
+    }
   }
 
   /**
@@ -259,6 +281,11 @@ public class MapSnapshotter {
       telemetry.onAppUserTurnstileEvent();
     }
     FileSource fileSource = FileSource.getInstance(context);
+    String apiBaseUrl = options.getApiBaseUrl();
+    if (!TextUtils.isEmpty(apiBaseUrl)) {
+      fileSource.setApiBaseUrl(apiBaseUrl);
+    }
+
     String programCacheDir = FileSource.getInternalCachePath(context);
 
     nativeInitialize(this, fileSource, options.pixelRatio, options.width,
@@ -532,7 +559,7 @@ public class MapSnapshotter {
   }
 
   private void checkThread() {
-    ThreadUtils.checkThread("MapSnapshotter");
+    ThreadUtils.checkThread(TAG);
   }
 
   protected void reset() {

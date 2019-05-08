@@ -5,12 +5,14 @@
 #import "NSValue+MGLStyleAttributeAdditions.h"
 #import "NSValue+MGLAdditions.h"
 #import "NSExpression+MGLPrivateAdditions.h"
+#import "NSDate+MGLAdditions.h"
 #import "MGLTypes.h"
 
 #import "MGLConversion.h"
 #include <mbgl/style/conversion/color_ramp_property_value.hpp>
 #include <mbgl/style/conversion/property_value.hpp>
 #include <mbgl/style/conversion/position.hpp>
+#import <mbgl/style/transition_options.hpp>
 #import <mbgl/style/types.hpp>
 
 #import <mbgl/util/enum.hpp>
@@ -28,6 +30,19 @@ namespace mbgl {
             class Expression;
         }
     }
+}
+
+NS_INLINE MGLTransition MGLTransitionFromOptions(const mbgl::style::TransitionOptions& options) {
+    MGLTransition transition;
+    transition.duration = MGLTimeIntervalFromDuration(options.duration.value_or(mbgl::Duration::zero()));
+    transition.delay = MGLTimeIntervalFromDuration(options.delay.value_or(mbgl::Duration::zero()));
+    
+    return transition;
+}
+
+NS_INLINE mbgl::style::TransitionOptions MGLOptionsFromTransition(MGLTransition transition) {
+    mbgl::style::TransitionOptions options { { MGLDurationFromTimeInterval(transition.duration) }, { MGLDurationFromTimeInterval(transition.delay) } };
+    return options;
 }
 
 id MGLJSONObjectFromMBGLExpression(const mbgl::style::expression::Expression &mbglExpression);
@@ -276,7 +291,7 @@ private: // Private utilities for converting from mbgl to mgl values
     }
 
     // Array
-    static ObjCType toMGLRawStyleValue(const std::vector<MBGLElement> &mbglStopValue) {
+    static NSArray<NSExpression*> *toMGLRawStyleValue(const std::vector<MBGLElement> &mbglStopValue) {
         NSMutableArray *array = [NSMutableArray arrayWithCapacity:mbglStopValue.size()];
         for (const auto &mbglElement: mbglStopValue) {
             [array addObject:[NSExpression expressionForConstantValue:toMGLRawStyleValue(mbglElement)]];
@@ -292,10 +307,8 @@ private: // Private utilities for converting from mbgl to mgl values
 
     // Enumerations
     template <typename MBGLEnum = MBGLType, typename MGLEnum = ObjCEnum>
-    static NSValue *toMGLRawStyleValue(const MBGLEnum &value) {
-        auto str = mbgl::Enum<MBGLEnum>::toString(value);
-        MGLEnum mglType = *mbgl::Enum<MGLEnum>::toEnum(str);
-        return [NSValue value:&mglType withObjCType:@encode(MGLEnum)];
+    static NSString *toMGLRawStyleValue(const MBGLEnum &value) {
+        return @(mbgl::Enum<MBGLEnum>::toString(value));
     }
 
     /// Converts all types of mbgl property values into an equivalent NSExpression.
@@ -305,29 +318,11 @@ private: // Private utilities for converting from mbgl to mgl values
             return nil;
         }
 
-        /**
-         As hack to allow converting enum => string values, we accept a second, dummy parameter in
-         the toRawStyleSpecValue() methods for converting 'atomic' (non-style-function) values.
-         This allows us to use `std::enable_if` to test (at compile time) whether or not MBGLType is an Enum.
-         */
-        template <typename MBGLEnum = MBGLType,
-            class = typename std::enable_if<!std::is_enum<MBGLEnum>::value>::type,
-        typename MGLEnum = ObjCEnum,
-            class = typename std::enable_if<!std::is_enum<MGLEnum>::value>::type>
         NSExpression *operator()(const MBGLType &value) const {
             id constantValue = toMGLRawStyleValue(value);
             if ([constantValue isKindOfClass:[NSArray class]]) {
                 return [NSExpression expressionForAggregate:constantValue];
             }
-            return [NSExpression expressionForConstantValue:constantValue];
-        }
-
-        template <typename MBGLEnum = MBGLType,
-            class = typename std::enable_if<std::is_enum<MBGLEnum>::value>::type,
-        typename MGLEnum = ObjCEnum,
-            class = typename std::enable_if<std::is_enum<MGLEnum>::value>::type>
-        NSExpression *operator()(const MBGLEnum &value) const {
-            NSString *constantValue = @(mbgl::Enum<MBGLEnum>::toString(value));
             return [NSExpression expressionForConstantValue:constantValue];
         }
 

@@ -1,6 +1,8 @@
 #include <mbgl/test/util.hpp>
 #include <mbgl/test/stub_file_source.hpp>
-#include <mbgl/map/map.hpp>
+#include <mbgl/test/map_adapter.hpp>
+
+#include <mbgl/map/map_options.hpp>
 #include <mbgl/util/io.hpp>
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/util/color.hpp>
@@ -32,17 +34,16 @@ namespace {
 class LocalGlyphRasterizerTest {
 public:
     LocalGlyphRasterizerTest(const optional<std::string> fontFamily)
-        : frontend(pixelRatio, fileSource, threadPool, optional<std::string>(), GLContextMode::Unique, fontFamily)
+        : frontend(1, threadPool, optional<std::string>(), gfx::ContextMode::Unique, fontFamily)
     {
     }
 
     util::RunLoop loop;
-    StubFileSource fileSource;
+    std::shared_ptr<StubFileSource> fileSource = std::make_shared<StubFileSource>();
     ThreadPool threadPool { 4 };
-    float pixelRatio { 1 };
     HeadlessFrontend frontend;
-    Map map { frontend, MapObserver::nullObserver(), frontend.getSize(), pixelRatio, fileSource,
-              threadPool, MapMode::Static};
+    MapAdapter map { frontend, MapObserver::nullObserver(), fileSource, threadPool,
+                  MapOptions().withMapMode(MapMode::Static).withSize(frontend.getSize())};
 
     void checkRendering(const char * name) {
         test::checkImage(std::string("test/fixtures/local_glyphs/") + name,
@@ -52,29 +53,34 @@ public:
 
 } // end namespace
 
-#ifdef __APPLE__
+// Enabling Qt requires adding a CJK-compatible font in the CI image.
+#if defined(__APPLE__)
 
 TEST(LocalGlyphRasterizer, PingFang) {
     LocalGlyphRasterizerTest test(std::string("PingFang"));
 
-    test.fileSource.glyphsResponse = [&] (const Resource& resource) {
+    test.fileSource->glyphsResponse = [&] (const Resource& resource) {
         EXPECT_EQ(Resource::Kind::Glyphs, resource.kind);
         Response response;
         response.data = std::make_shared<std::string>(util::read_file("test/fixtures/resources/glyphs.pbf"));
         return response;
     };
     test.map.getStyle().loadJSON(util::read_file("test/fixtures/local_glyphs/mixed.json"));
+#if defined(__APPLE__)
     test.checkRendering("ping_fang");
+#elif defined(__QT__)
+    test.checkRendering("ping_fang_qt");
+#endif // defined(__APPLE__)
 }
 
-#endif
+#endif // defined(__APPLE__)
 
 TEST(LocalGlyphRasterizer, NoLocal) {
     // Expectation: without any local fonts set, and without any CJK glyphs provided,
     // the output should just contain basic latin characters.
     LocalGlyphRasterizerTest test({});
 
-    test.fileSource.glyphsResponse = [&] (const Resource& resource) {
+    test.fileSource->glyphsResponse = [&] (const Resource& resource) {
         EXPECT_EQ(Resource::Kind::Glyphs, resource.kind);
         Response response;
         response.data = std::make_shared<std::string>(util::read_file("test/fixtures/resources/glyphs.pbf"));

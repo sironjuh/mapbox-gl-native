@@ -39,5 +39,17 @@
   "SymbolLayerActivity",
   "LocationFragmentActivity",
   "MergeOfflineRegionsActivity",
-  "NestedViewPagerActivity"
+  "NestedViewPagerActivity",
+  "DebugModeActivity",
+  "TextureViewDebugModeActivity",
+  "RuntimeStyleActivity",
+  "GridSourceActivity",
+  "AnimatedImageSourceActivity",
+  "EspressoTestActivity",
+  "ChangeResourcesCachePathActivity",
+  "EspressoTestActivity",
+  "FragmentBackStackActivity",
+  "ChildFragmentMapInDialogActivity",
+  "PerformanceMeasurementActivity",
+  "DownloadRegionActivity"
 ]

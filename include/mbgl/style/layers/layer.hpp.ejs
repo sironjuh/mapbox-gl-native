@@ -14,7 +14,6 @@
 #include <mbgl/style/filter.hpp>
 #include <mbgl/style/property_value.hpp>
 #include <mbgl/style/expression/formatted.hpp>
-
 #include <mbgl/util/color.hpp>
 
 <% if (type === 'line' || type === 'symbol') { -%>
@@ -44,8 +43,8 @@ public:
 
 <% for (const property of layoutProperties) { -%>
     static <%- propertyValueType(property) %> getDefault<%- camelize(property.name) %>();
-    <%- propertyValueType(property) %> get<%- camelize(property.name) %>() const;
-    void set<%- camelize(property.name) %>(<%- propertyValueType(property) %>);
+    const <%- propertyValueType(property) %>& get<%- camelize(property.name) %>() const;
+    void set<%- camelize(property.name) %>(const <%- propertyValueType(property) %>&);
 
 <% } -%>
 <% } -%>
@@ -53,8 +52,8 @@ public:
 
 <% for (const property of paintProperties) { -%>
     static <%- propertyValueType(property) %> getDefault<%- camelize(property.name) %>();
-    <%- propertyValueType(property) %> get<%- camelize(property.name) %>() const;
-    void set<%- camelize(property.name) %>(<%- propertyValueType(property) %>);
+    const <%- propertyValueType(property) %>& get<%- camelize(property.name) %>() const;
+    void set<%- camelize(property.name) %>(const <%- propertyValueType(property) %>&);
     void set<%- camelize(property.name) %>Transition(const TransitionOptions&);
     TransitionOptions get<%- camelize(property.name) %>Transition() const;
 
@@ -73,12 +72,4 @@ protected:
 };
 
 } // namespace style
-
-class <%- camelize(type) %>LayerFactory : public LayerFactory {
-protected:
-    const style::LayerTypeInfo* getTypeInfo() const noexcept final;
-    std::unique_ptr<style::Layer> createLayer(const std::string& id, const style::conversion::Convertible& value) noexcept final;
-    std::unique_ptr<RenderLayer> createRenderLayer(Immutable<style::Layer::Impl>) noexcept final;
-};
-
 } // namespace mbgl
