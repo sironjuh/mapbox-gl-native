@@ -1,4 +1,5 @@
 #include <mbgl/tile/raster_dem_tile.hpp>
+
 #include <mbgl/tile/raster_dem_tile_worker.hpp>
 #include <mbgl/tile/tile_observer.hpp>
 #include <mbgl/tile/tile_loader_impl.hpp>
@@ -6,6 +7,7 @@
 #include <mbgl/storage/resource.hpp>
 #include <mbgl/storage/response.hpp>
 #include <mbgl/renderer/tile_parameters.hpp>
+#include <mbgl/renderer/tile_render_data.hpp>
 #include <mbgl/renderer/buckets/hillshade_bucket.hpp>
 #include <mbgl/actor/scheduler.hpp>
 
@@ -17,7 +19,7 @@ RasterDEMTile::RasterDEMTile(const OverscaledTileID& id_,
     : Tile(Kind::RasterDEM, id_),
       loader(*this, id_, parameters, tileset),
       mailbox(std::make_shared<Mailbox>(*Scheduler::GetCurrent())),
-      worker(parameters.workerScheduler,
+      worker(Scheduler::GetBackground(),
              ActorRef<RasterDEMTile>(*this, mailbox)) {
 
     encoding = tileset.encoding;
@@ -33,6 +35,10 @@ RasterDEMTile::RasterDEMTile(const OverscaledTileID& id_,
 }
 
 RasterDEMTile::~RasterDEMTile() = default;
+
+std::unique_ptr<TileRenderData> RasterDEMTile::createRenderData() {
+    return std::make_unique<SharedBucketTileRenderData<HillshadeBucket>>(bucket);
+}
 
 void RasterDEMTile::setError(std::exception_ptr err) {
     loaded = true;
@@ -68,15 +74,8 @@ void RasterDEMTile::onError(std::exception_ptr err, const uint64_t resultCorrela
     observer->onTileError(*this, err);
 }
 
-void RasterDEMTile::upload(gfx::Context& context) {
-    if (bucket) {
-        bucket->upload(context);
-    }
-}
-
-
-Bucket* RasterDEMTile::getBucket(const style::Layer::Impl&) const {
-    return bucket.get();
+bool RasterDEMTile::layerPropertiesUpdated(const Immutable<style::LayerProperties>&) {
+    return bool(bucket);
 }
 
 HillshadeBucket* RasterDEMTile::getBucket() const {

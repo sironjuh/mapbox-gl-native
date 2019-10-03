@@ -2,18 +2,24 @@ package com.mapbox.mapboxsdk.testapp.storage
 
 import android.app.Activity
 import android.support.annotation.WorkerThread
+import com.mapbox.mapboxsdk.AppCenter
 import com.mapbox.mapboxsdk.storage.FileSource
-import junit.framework.Assert
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import junit.framework.Assert
 
-class FileSourceTestUtils(private val activity: Activity) {
+class FileSourceTestUtils(private val activity: Activity) : AppCenter() {
   val originalPath = FileSource.getResourcesCachePath(activity)
   val testPath = "$originalPath/test"
+  val testPath2 = "$originalPath/test2"
+
+  private val paths = listOf(testPath, testPath2)
 
   fun setup() {
-    val testFile = File(testPath)
-    testFile.mkdirs()
+    for (path in paths) {
+      val testFile = File(path)
+      testFile.mkdirs()
+    }
   }
 
   @WorkerThread
@@ -22,26 +28,29 @@ class FileSourceTestUtils(private val activity: Activity) {
     if (currentPath != originalPath) {
       changePath(originalPath)
     }
-    val testFile = File(testPath)
-    if (testFile.exists()) {
-      testFile.deleteRecursively()
+
+    for (path in paths) {
+      val testFile = File(path)
+      if (testFile.exists()) {
+        testFile.deleteRecursively()
+      }
     }
   }
 
   @WorkerThread
-  fun changePath(path: String) {
+  fun changePath(requestedPath: String) {
     val latch = CountDownLatch(1)
     activity.runOnUiThread {
       FileSource.setResourcesCachePath(
-        activity,
-        path,
+        requestedPath,
         object : FileSource.ResourcesCachePathChangeCallback {
-          override fun onSuccess(path: String?) {
+          override fun onSuccess(path: String) {
+            Assert.assertEquals(requestedPath, path)
             latch.countDown()
           }
 
-          override fun onError(message: String?) {
-            Assert.fail("Resource path change failed - path: $path, message: $message")
+          override fun onError(message: String) {
+            Assert.fail("Resource path change failed - path: $requestedPath, message: $message")
           }
         })
     }

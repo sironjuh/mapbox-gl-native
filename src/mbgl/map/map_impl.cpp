@@ -9,18 +9,16 @@ namespace mbgl {
 
 Map::Impl::Impl(RendererFrontend& frontend_,
                 MapObserver& observer_,
-                Scheduler& scheduler_,
                 std::shared_ptr<FileSource> fileSource_,
                 const MapOptions& mapOptions)
         : observer(observer_),
           rendererFrontend(frontend_),
-          scheduler(scheduler_),
           transform(observer, mapOptions.constrainMode(), mapOptions.viewportMode()),
           mode(mapOptions.mapMode()),
           pixelRatio(mapOptions.pixelRatio()),
           crossSourceCollisions(mapOptions.crossSourceCollisions()),
           fileSource(std::move(fileSource_)),
-          style(std::make_unique<style::Style>(scheduler, *fileSource, pixelRatio)),
+          style(std::make_unique<style::Style>(*fileSource, pixelRatio)),
           annotationManager(*style) {
     transform.setNorthOrientation(mapOptions.northOrientation());
     style->impl->setObserver(this);
@@ -65,7 +63,7 @@ void Map::Impl::onUpdate() {
         style->impl->getSourceImpls(),
         style->impl->getLayerImpls(),
         annotationManager,
-        *fileSource,
+        fileSource,
         prefetchZoomDelta,
         bool(stillImageRequest),
         crossSourceCollisions
@@ -132,11 +130,11 @@ void Map::Impl::onWillStartRenderingFrame() {
     }
 }
 
-void Map::Impl::onDidFinishRenderingFrame(RenderMode renderMode, bool needsRepaint) {
+void Map::Impl::onDidFinishRenderingFrame(RenderMode renderMode, bool needsRepaint, bool placemenChanged) {
     rendererFullyLoaded = renderMode == RenderMode::Full;
 
     if (mode == MapMode::Continuous) {
-        observer.onDidFinishRenderingFrame(MapObserver::RenderMode(renderMode));
+        observer.onDidFinishRenderingFrame({MapObserver::RenderMode(renderMode), needsRepaint, placemenChanged});
 
         if (needsRepaint || transform.inTransition()) {
             onUpdate();
@@ -179,6 +177,14 @@ void Map::Impl::onStyleImageMissing(const std::string& id, std::function<void()>
 
     done();
     onUpdate();
+}
+
+void Map::Impl::onRemoveUnusedStyleImages(const std::vector<std::string>& unusedImageIDs) {
+    for (const auto& unusedImageID : unusedImageIDs) {
+        if (observer.onCanRemoveUnusedStyleImage(unusedImageID)) {
+            style->removeImage(unusedImageID);
+        }
+    }
 }
 
 } // namespace mbgl

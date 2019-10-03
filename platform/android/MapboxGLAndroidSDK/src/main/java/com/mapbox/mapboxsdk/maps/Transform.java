@@ -16,12 +16,15 @@ import com.mapbox.mapboxsdk.log.Logger;
 import static com.mapbox.mapboxsdk.maps.MapboxMap.OnCameraMoveStartedListener;
 
 /**
+ * Internal use.
+ * <p>
  * Resembles the current Map transformation.
+ * </p>
  * <p>
  * Responsible for synchronising {@link CameraPosition} state and notifying camera change listeners.
  * </p>
  */
-final class Transform implements MapView.OnCameraDidChangeListener {
+public final class Transform implements MapView.OnCameraDidChangeListener {
 
   private static final String TAG = "Mbgl-Transform";
 
@@ -95,14 +98,18 @@ final class Transform implements MapView.OnCameraDidChangeListener {
     }
   }
 
+  /**
+   * Internal use.
+   */
   @UiThread
-  final void moveCamera(@NonNull MapboxMap mapboxMap, CameraUpdate update,
-                        @Nullable final MapboxMap.CancelableCallback callback) {
+  public final void moveCamera(@NonNull MapboxMap mapboxMap, CameraUpdate update,
+                               @Nullable final MapboxMap.CancelableCallback callback) {
     CameraPosition cameraPosition = update.getCameraPosition(mapboxMap);
     if (isValidCameraPosition(cameraPosition)) {
       cancelTransitions();
       cameraChangeDispatcher.onCameraMoveStarted(OnCameraMoveStartedListener.REASON_API_ANIMATION);
-      nativeMap.jumpTo(cameraPosition.target, cameraPosition.zoom, cameraPosition.tilt, cameraPosition.bearing);
+      nativeMap.jumpTo(cameraPosition.target, cameraPosition.zoom, cameraPosition.tilt, cameraPosition.bearing,
+        cameraPosition.padding);
       cameraChangeDispatcher.onCameraIdle();
       invalidateCameraPosition();
       handler.post(new Runnable() {
@@ -113,6 +120,8 @@ final class Transform implements MapView.OnCameraDidChangeListener {
           }
         }
       });
+    } else if (callback != null) {
+      callback.onFinish();
     }
   }
 
@@ -129,13 +138,18 @@ final class Transform implements MapView.OnCameraDidChangeListener {
       }
       mapView.addOnCameraDidChangeListener(this);
       nativeMap.easeTo(cameraPosition.target, cameraPosition.zoom, cameraPosition.bearing, cameraPosition.tilt,
-        durationMs, easingInterpolator);
+        cameraPosition.padding, durationMs, easingInterpolator);
+    } else if (callback != null) {
+      callback.onFinish();
     }
   }
 
+  /**
+   * Internal use.
+   */
   @UiThread
-  final void animateCamera(@NonNull MapboxMap mapboxMap, CameraUpdate update, int durationMs,
-                           @Nullable final MapboxMap.CancelableCallback callback) {
+  public final void animateCamera(@NonNull MapboxMap mapboxMap, CameraUpdate update, int durationMs,
+                                  @Nullable final MapboxMap.CancelableCallback callback) {
     CameraPosition cameraPosition = update.getCameraPosition(mapboxMap);
     if (isValidCameraPosition(cameraPosition)) {
       cancelTransitions();
@@ -146,7 +160,9 @@ final class Transform implements MapView.OnCameraDidChangeListener {
       }
       mapView.addOnCameraDidChangeListener(this);
       nativeMap.flyTo(cameraPosition.target, cameraPosition.zoom, cameraPosition.bearing,
-        cameraPosition.tilt, durationMs);
+        cameraPosition.tilt, cameraPosition.padding, durationMs);
+    } else if (callback != null) {
+      callback.onFinish();
     }
   }
 

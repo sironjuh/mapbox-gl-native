@@ -66,18 +66,13 @@ MAPBOX_ETERNAL_CONSTEXPR const auto extensionGetters = mapbox::eternal::hash_map
 } // namespace
 
 RenderGeoJSONSource::RenderGeoJSONSource(Immutable<style::GeoJSONSource::Impl> impl_)
-    : RenderSource(impl_) {
-    tilePyramid.setObserver(this);
+    : RenderTileSource(std::move(impl_)) {
 }
 
 RenderGeoJSONSource::~RenderGeoJSONSource() = default;
 
 const style::GeoJSONSource::Impl& RenderGeoJSONSource::impl() const {
     return static_cast<const style::GeoJSONSource::Impl&>(*baseImpl);
-}
-
-bool RenderGeoJSONSource::isLoaded() const {
-    return tilePyramid.isLoaded();
 }
 
 void RenderGeoJSONSource::update(Immutable<style::Source::Impl> baseImpl_,
@@ -99,7 +94,7 @@ void RenderGeoJSONSource::update(Immutable<style::Source::Impl> baseImpl_,
             const uint8_t maxZ = impl().getZoomRange().max;
             for (const auto& pair : tilePyramid.getTiles()) {
                 if (pair.first.canonical.z <= maxZ) {
-                    static_cast<GeoJSONTile*>(pair.second.get())->updateData(data_->getTile(pair.first.canonical));
+                    static_cast<GeoJSONTile*>(pair.second.get())->updateData(data_->getTile(pair.first.canonical), needsRelayout);
                 }
             }
         }
@@ -121,31 +116,6 @@ void RenderGeoJSONSource::update(Immutable<style::Source::Impl> baseImpl_,
                        [&, data_] (const OverscaledTileID& tileID) {
                            return std::make_unique<GeoJSONTile>(tileID, impl().id, parameters, data_->getTile(tileID.canonical));
                        });
-}
-
-void RenderGeoJSONSource::startRender(PaintParameters& parameters) {
-    tilePyramid.startRender(parameters);
-}
-
-void RenderGeoJSONSource::finishRender(PaintParameters& parameters) {
-    tilePyramid.finishRender(parameters);
-}
-
-std::vector<std::reference_wrapper<RenderTile>> RenderGeoJSONSource::getRenderTiles() {
-    return tilePyramid.getRenderTiles();
-}
-
-std::unordered_map<std::string, std::vector<Feature>>
-RenderGeoJSONSource::queryRenderedFeatures(const ScreenLineString& geometry,
-                                           const TransformState& transformState,
-                                           const std::vector<const RenderLayer*>& layers,
-                                           const RenderedQueryOptions& options,
-                                           const mat4& projMatrix) const {
-    return tilePyramid.queryRenderedFeatures(geometry, transformState, layers, options, projMatrix);
-}
-
-std::vector<Feature> RenderGeoJSONSource::querySourceFeatures(const SourceQueryOptions& options) const {
-    return tilePyramid.querySourceFeatures(options);
 }
 
 mapbox::util::variant<Value, FeatureCollection>
@@ -173,14 +143,6 @@ RenderGeoJSONSource::queryFeatureExtensions(const Feature& feature,
     }
 
     return extensionIt->second(std::move(jsonData), static_cast<std::uint32_t>(*clusterID), args);
-}
-
-void RenderGeoJSONSource::reduceMemoryUse() {
-    tilePyramid.reduceMemoryUse();
-}
-
-void RenderGeoJSONSource::dumpDebugLogs() const {
-    tilePyramid.dumpDebugLogs();
 }
 
 } // namespace mbgl

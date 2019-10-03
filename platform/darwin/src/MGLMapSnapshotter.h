@@ -6,6 +6,30 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /**
+ An overlay that is placed within a `MGLMapSnapshot`.
+ To access this object, use `-[MGLMapSnapshotter startWithOverlayHandler:completionHandler:]`.
+ */
+
+MGL_EXPORT
+@interface MGLMapSnapshotOverlay : NSObject
+
+/**
+ The current `CGContext` that snapshot is drawing within. You may use this context
+ to perform additional custom drawing.
+ */
+@property (nonatomic, readonly) CGContextRef context;
+
+@end
+
+/**
+A block provided during the snapshot drawing process, enabling the ability to
+draw custom overlays rendered with Core Graphics.
+
+ @param snapshotOverlay The `MGLMapSnapshotOverlay` provided during snapshot drawing.
+ */
+typedef void (^MGLMapSnapshotOverlayHandler)(MGLMapSnapshotOverlay * snapshotOverlay);
+
+/**
  The options to use when creating images with the `MGLMapSnapshotter`.
  */
 MGL_EXPORT
@@ -15,7 +39,7 @@ MGL_EXPORT
  Creates a set of options with the minimum required information.
  
  @param styleURL URL of the map style to snapshot. The URL may be a full HTTP or
-    HTTPS URL, a Mapbox URL indicating the style’s map ID
+    HTTPS URL, a Mapbox style URL 
     (`mapbox://styles/{user}/{style}`), or a path to a local file relative to
     the application’s resource path. Specify `nil` for the default style.
  @param size The image size.
@@ -199,6 +223,15 @@ MGL_EXPORT
  @param completionHandler The block to handle the result in.
  */
 - (void)startWithQueue:(dispatch_queue_t)queue completionHandler:(MGLMapSnapshotCompletionHandler)completionHandler;
+
+/**
+ Starts the snapshot creation and executes the specified blocks with the result
+ on the specified queue. Use this option if you want to add custom drawing on top of the
+ resulting `MGLMapSnapShot`.
+ @param overlayHandler The block to handle manipulation of the `MGLMapSnapshotter`'s `CGContext`.
+ @param completionHandler The block to handle the result in.
+ */
+- (void)startWithOverlayHandler:(MGLMapSnapshotOverlayHandler)overlayHandler completionHandler:(MGLMapSnapshotCompletionHandler)completionHandler;
 
 /**
  Cancels the snapshot creation request, if any.

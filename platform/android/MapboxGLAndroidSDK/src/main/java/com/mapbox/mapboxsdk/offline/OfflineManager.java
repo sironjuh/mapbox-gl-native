@@ -2,12 +2,12 @@ package com.mapbox.mapboxsdk.offline;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
-
+import android.support.annotation.Nullable;
+import android.support.annotation.UiThread;
 import com.mapbox.mapboxsdk.LibraryLoader;
 import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.R;
@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.nio.channels.FileChannel;
 
 /**
@@ -32,6 +31,7 @@ import java.nio.channels.FileChannel;
  *
  * @see <a href="https://docs.mapbox.com/help/troubleshooting/mobile-offline/">Offline Maps Information/</a>
  */
+@UiThread
 public class OfflineManager {
 
   private static final String TAG = "Mbgl - OfflineManager";
@@ -53,7 +53,7 @@ public class OfflineManager {
   private final FileSource fileSource;
 
   // Makes sure callbacks come back to the main thread
-  private Handler handler;
+  private final Handler handler = new Handler(Looper.getMainLooper());
 
   // This object is implemented as a singleton
   @SuppressLint("StaticFieldLeak")
@@ -156,14 +156,6 @@ public class OfflineManager {
     return instance;
   }
 
-  private Handler getHandler() {
-    if (handler == null) {
-      handler = new Handler(Looper.getMainLooper());
-    }
-
-    return handler;
-  }
-
   /**
    * Retrieve all regions in the offline database.
    * <p>
@@ -179,7 +171,7 @@ public class OfflineManager {
 
       @Override
       public void onList(final OfflineRegion[] offlineRegions) {
-        getHandler().post(new Runnable() {
+        handler.post(new Runnable() {
           @Override
           public void run() {
             fileSource.deactivate();
@@ -190,7 +182,7 @@ public class OfflineManager {
 
       @Override
       public void onError(final String error) {
-        getHandler().post(new Runnable() {
+        handler.post(new Runnable() {
           @Override
           public void run() {
             fileSource.deactivate();
@@ -205,6 +197,8 @@ public class OfflineManager {
    * Merge offline regions from a secondary database into the main offline database.
    * <p>
    * When the merge is completed, or fails, the {@link MergeOfflineRegionsCallback} will be invoked on the main thread.
+   * The callback reference is <b>strongly kept</b> throughout the process,
+   * so it needs to be wrapped in a weak reference or released on the client side if necessary.
    * <p>
    * The secondary database may need to be upgraded to the latest schema.
    * This is done in-place and requires write-access to the provided path.
@@ -225,73 +219,263 @@ public class OfflineManager {
    */
   public void mergeOfflineRegions(@NonNull String path, @NonNull final MergeOfflineRegionsCallback callback) {
     final File src = new File(path);
-    new FileUtils.CheckFileReadPermissionTask(new FileUtils.OnCheckFileReadPermissionListener() {
+    new Thread(new Runnable() {
       @Override
-      public void onReadPermissionGranted() {
-        new FileUtils.CheckFileWritePermissionTask(new FileUtils.OnCheckFileWritePermissionListener() {
-          @Override
-          public void onWritePermissionGranted() {
-            // path writable, merge and update schema in place if necessary
-            mergeOfflineDatabaseFiles(src, callback, false);
+      public void run() {
+        String errorMessage = null;
+        if (src.canWrite()) {
+          handler.post(new Runnable() {
+            @Override
+            public void run() {
+              // path writable, merge and update schema in place if necessary
+              mergeOfflineDatabaseFiles(src, callback, false);
+            }
+          });
+        } else if (src.canRead()) {
+          // path not writable, copy the the file to temp directory
+          final File dst = new File(FileSource.getInternalCachePath(context), src.getName());
+          try {
+            copyTempDatabaseFile(src, dst);
+            handler.post(new Runnable() {
+              @Override
+              public void run() {
+                // merge and update schema using the copy
+                OfflineManager.this.mergeOfflineDatabaseFiles(dst, callback, true);
+              }
+            });
+          } catch (IOException ex) {
+            ex.printStackTrace();
+            errorMessage = ex.getMessage();
           }
+        } else {
+          // path not readable, abort
+          errorMessage = "Secondary database needs to be located in a readable path.";
+        }
 
-          @Override
-          public void onError() {
-            // path not writable, copy the the file to temp directory, then merge and update schema on a copy if
-            // necessary
-            File dst = new File(FileSource.getInternalCachePath(context), src.getName());
-            new CopyTempDatabaseFileTask(OfflineManager.this, callback).execute(src, dst);
-          }
-        }).execute(src);
-      }
-
-      @Override
-      public void onError() {
-        // path not readable, abort
-        callback.onError("Secondary database needs to be located in a readable path.");
-      }
-    }).execute(src);
-  }
-
-  private static final class CopyTempDatabaseFileTask extends AsyncTask<Object, Void, Object> {
-    @NonNull
-    private final WeakReference<OfflineManager> offlineManagerWeakReference;
-    @NonNull
-    private final WeakReference<MergeOfflineRegionsCallback> callbackWeakReference;
-
-    CopyTempDatabaseFileTask(OfflineManager offlineManager, MergeOfflineRegionsCallback callback) {
-      this.offlineManagerWeakReference = new WeakReference<>(offlineManager);
-      this.callbackWeakReference = new WeakReference<>(callback);
-    }
-
-    @Override
-    protected Object doInBackground(Object... objects) {
-      File src = (File) objects[0];
-      File dst = (File) objects[1];
-
-      try {
-        copyTempDatabaseFile(src, dst);
-        return dst;
-      } catch (IOException ex) {
-        return ex.getMessage();
-      }
-    }
-
-    @Override
-    protected void onPostExecute(Object object) {
-      MergeOfflineRegionsCallback callback = callbackWeakReference.get();
-      if (callback != null) {
-        OfflineManager offlineManager = offlineManagerWeakReference.get();
-        if (object instanceof File && offlineManager != null) {
-          // successfully copied the file, perform merge
-          File dst = (File) object;
-          offlineManager.mergeOfflineDatabaseFiles(dst, callback, true);
-        } else if (object instanceof String) {
-          // error occurred
-          callback.onError((String) object);
+        if (errorMessage != null) {
+          final String finalErrorMessage = errorMessage;
+          handler.post(new Runnable() {
+            @Override
+            public void run() {
+              callback.onError(finalErrorMessage);
+            }
+          });
         }
       }
-    }
+    }).start();
+  }
+
+  /**
+   * Delete existing database and re-initialize.
+   * <p>
+   * When the operation is complete or encounters an error, the given callback will be
+   * executed on the database thread; it is the responsibility of the SDK bindings
+   * to re-execute a user-provided callback on the main thread.
+   * </p>
+   *
+   * @param callback the callback to be invoked when the database was reset or when the operation erred.
+   */
+  public void resetDatabase(@Nullable final FileSourceCallback callback) {
+    fileSource.activate();
+    nativeResetDatabase(new FileSourceCallback() {
+      @Override
+      public void onSuccess() {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onSuccess();
+            }
+          }
+        });
+      }
+
+      @Override
+      public void onError(@NonNull final String message) {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onError(message);
+            }
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Forces re-validation of the ambient cache.
+   * <p>
+   * Forces Mapbox GL Native to revalidate resources stored in the ambient
+   * cache with the tile server before using them, making sure they
+   * are the latest version. This is more efficient than cleaning the
+   * cache because if the resource is considered valid after the server
+   * lookup, it will not get downloaded again.
+   * <p>
+   * Resources overlapping with offline regions will not be affected
+   * by this call.
+   * </p>
+   *
+   * @param callback the callback to be invoked when the ambient cache was invalidated or when the operation erred.
+   */
+  public void invalidateAmbientCache(@Nullable final FileSourceCallback callback) {
+    fileSource.activate();
+    nativeInvalidateAmbientCache(new FileSourceCallback() {
+      @Override
+      public void onSuccess() {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onSuccess();
+            }
+          }
+        });
+      }
+
+      @Override
+      public void onError(@NonNull final String message) {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onError(message);
+            }
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Erase resources from the ambient cache, freeing storage space.
+   * <p>
+   * Erases the ambient cache, freeing resources. This operation can be
+   * potentially slow because it will trigger a VACUUM on SQLite,
+   * forcing the database to move pages on the filesystem.
+   * </p>
+   * <p>
+   * Resources overlapping with offline regions will not be affected
+   * by this call.
+   * </p>
+   *
+   * @param callback the callback to be invoked when the ambient cache was cleared or when the operation erred.
+   */
+  public void clearAmbientCache(@Nullable final FileSourceCallback callback) {
+    fileSource.activate();
+    nativeClearAmbientCache(new FileSourceCallback() {
+      @Override
+      public void onSuccess() {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onSuccess();
+            }
+          }
+        });
+      }
+
+      @Override
+      public void onError(@NonNull final String message) {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onError(message);
+            }
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Sets the maximum size in bytes for the ambient cache.
+   * <p>
+   * This call is potentially expensive because it will try
+   * to trim the data in case the database is larger than the
+   * size defined. The size of offline regions are not affected
+   * by this settings, but the ambient cache will always try
+   * to not exceed the maximum size defined, taking into account
+   * the current size for the offline regions.
+   * </p>
+   * <p>
+   * Note that if you use the SDK's offline functionality, your ability to set the ambient cache size will be limited.
+   * Space that offline regions take up detract from the space available for ambient caching, and the ambient cache
+   * size does not block offline downloads. For example: if the maximum cache size is set to 50 MB and 40 MB are
+   * already used by offline regions, the ambient cache size will effectively be 10 MB.
+   * </p>
+   * <p>
+   * Setting the size to 0 will disable the cache if there is no
+   * offline region on the database.
+   * </p>
+   * <[
+   * <p>
+   * This method should always be called at the start of an app, before setting the style and loading a map.
+   * Otherwise, the map will instantiate with the default cache size of 50 MB.
+   * </p>
+   *
+   * @param size     the maximum size of the ambient cache
+   * @param callback the callback to be invoked when the the maximum size has been set or when the operation erred.
+   */
+  public void setMaximumAmbientCacheSize(long size, @Nullable final FileSourceCallback callback) {
+    fileSource.activate();
+    nativeSetMaximumAmbientCacheSize(size, new FileSourceCallback() {
+      @Override
+      public void onSuccess() {
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onSuccess();
+            }
+          }
+        });
+      }
+
+      @Override
+      public void onError(@NonNull final String message) {
+        fileSource.activate();
+        handler.post(new Runnable() {
+          @Override
+          public void run() {
+            fileSource.deactivate();
+            if (callback != null) {
+              callback.onError(message);
+            }
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * This callback receives an asynchronous response indicating if an operation has succeeded or failed.
+   */
+  @Keep
+  public interface FileSourceCallback {
+
+    /**
+     * Receives the success of an operation
+     */
+    void onSuccess();
+
+    /**
+     * Receives an error message if an operation was not successful
+     *
+     * @param message the error message
+     */
+    void onError(@NonNull String message);
+
   }
 
   private static void copyTempDatabaseFile(@NonNull File sourceFile, File destFile) throws IOException {
@@ -324,13 +508,13 @@ public class OfflineManager {
     mergeOfflineRegions(fileSource, file.getAbsolutePath(), new MergeOfflineRegionsCallback() {
       @Override
       public void onMerge(final OfflineRegion[] offlineRegions) {
-        getHandler().post(new Runnable() {
+        if (isTemporaryFile) {
+          file.delete();
+        }
+        handler.post(new Runnable() {
           @Override
           public void run() {
             fileSource.deactivate();
-            if (isTemporaryFile) {
-              file.delete();
-            }
             callback.onMerge(offlineRegions);
           }
         });
@@ -338,13 +522,13 @@ public class OfflineManager {
 
       @Override
       public void onError(final String error) {
-        getHandler().post(new Runnable() {
+        if (isTemporaryFile) {
+          file.delete();
+        }
+        handler.post(new Runnable() {
           @Override
           public void run() {
             fileSource.deactivate();
-            if (isTemporaryFile) {
-              file.delete();
-            }
             callback.onError(error);
           }
         });
@@ -353,7 +537,13 @@ public class OfflineManager {
   }
 
   /**
-   * Create an offline region in the database.
+   * Creates an offline region in the database by downloading the resources needed to use
+   * the given region offline.
+   * <p>
+   * As of version 8.3.0 of the Maps SDK for Android, offline tile requests are no longer exempt from
+   * billing on mobile. Developers are subject to separate Vector Tile or Raster Tile API pricing for
+   * offline use. See <a href="https://www.mapbox.com/pricing/">our pricing page</a> for more information.
+   * </p>
    * <p>
    * When the initial database queries have completed, the provided callback will be
    * executed on the main thread.
@@ -384,7 +574,7 @@ public class OfflineManager {
 
       @Override
       public void onCreate(final OfflineRegion offlineRegion) {
-        getHandler().post(new Runnable() {
+        handler.post(new Runnable() {
           @Override
           public void run() {
             ConnectivityReceiver.instance(context).deactivate();
@@ -396,7 +586,7 @@ public class OfflineManager {
 
       @Override
       public void onError(final String error) {
-        getHandler().post(new Runnable() {
+        handler.post(new Runnable() {
           @Override
           public void run() {
             ConnectivityReceiver.instance(context).deactivate();
@@ -425,10 +615,15 @@ public class OfflineManager {
   }
 
   /**
-   * Changing or bypassing this limit without permission from Mapbox is prohibited
-   * by the Mapbox Terms of Service.
+   * Sets the maximum number of Mapbox-hosted tiles that may be downloaded and stored on the current device.
+   * By default, the limit is set to 6,000.
+   * <p>
+   * Once this limit is reached, {@link OfflineRegion.OfflineRegionObserver#mapboxTileCountLimitExceeded(long)}
+   * fires every additional attempt to download additional tiles until already downloaded tiles are removed
+   * by calling {@link OfflineRegion#deleteOfflineRegion(OfflineRegion.OfflineRegionDeleteCallback)}.
+   * </p>
    *
-   * @param limit the new tile count limit.
+   * @param limit the maximum number of tiles allowed to be downloaded
    */
   @Keep
   public native void setOfflineMapboxTileCountLimit(long limit);
@@ -449,6 +644,18 @@ public class OfflineManager {
 
   @Keep
   private native void mergeOfflineRegions(FileSource fileSource, String path, MergeOfflineRegionsCallback callback);
+
+  @Keep
+  private native void nativeResetDatabase(@Nullable FileSourceCallback callback);
+
+  @Keep
+  private native void nativeInvalidateAmbientCache(@Nullable FileSourceCallback callback);
+
+  @Keep
+  private native void nativeClearAmbientCache(@Nullable FileSourceCallback callback);
+
+  @Keep
+  private native void nativeSetMaximumAmbientCacheSize(long size, @Nullable FileSourceCallback callback);
 
   /**
    * Insert the provided resource into the ambient cache

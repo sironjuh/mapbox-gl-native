@@ -1,3 +1,5 @@
+// clang-format off
+
 // This file is generated. Edit scripts/generate-style-code.js, then run `make style-code`.
 
 #pragma once
@@ -41,6 +43,8 @@ public:
         BackgroundPaintProperties::PossiblyEvaluated);
     ~BackgroundLayerProperties() override;
 
+    unsigned long constantsMask() const override;
+
     const BackgroundLayer::Impl& layerImpl() const;
     // Data members.
     CrossfadeParameters crossfade;
@@ -49,3 +53,5 @@ public:
 
 } // namespace style
 } // namespace mbgl
+
+// clang-format on

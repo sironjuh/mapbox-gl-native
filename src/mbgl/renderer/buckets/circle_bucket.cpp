@@ -24,12 +24,14 @@ CircleBucket::CircleBucket(const BucketParameters& parameters, const std::vector
 
 CircleBucket::~CircleBucket() = default;
 
-void CircleBucket::upload(gfx::Context& context) {
-    vertexBuffer = context.createVertexBuffer(std::move(vertices));
-    indexBuffer = context.createIndexBuffer(std::move(triangles));
+void CircleBucket::upload(gfx::UploadPass& uploadPass) {
+    if (!uploaded) {
+        vertexBuffer = uploadPass.createVertexBuffer(std::move(vertices));
+        indexBuffer = uploadPass.createIndexBuffer(std::move(triangles));
+    }
 
     for (auto& pair : paintPropertyBinders) {
-        pair.second.upload(context);
+        pair.second.upload(uploadPass);
     }
 
     uploaded = true;
@@ -39,14 +41,8 @@ bool CircleBucket::hasData() const {
     return !segments.empty();
 }
 
-bool CircleBucket::supportsLayer(const style::Layer::Impl& impl) const {
-    return style::CircleLayer::Impl::staticTypeInfo() == impl.getTypeInfo();
-}
-
-void CircleBucket::addFeature(const GeometryTileFeature& feature,
-                                 const GeometryCollection& geometry,
-                                 const ImagePositions&,
-                                 const PatternLayerMap&) {
+void CircleBucket::addFeature(const GeometryTileFeature& feature, const GeometryCollection& geometry,
+                              const ImagePositions&, const PatternLayerMap&, std::size_t featureIndex) {
     constexpr const uint16_t vertexLength = 4;
 
     for (auto& circle : geometry) {
@@ -94,7 +90,7 @@ void CircleBucket::addFeature(const GeometryTileFeature& feature,
     }
 
     for (auto& pair : paintPropertyBinders) {
-        pair.second.populateVertexVectors(feature, vertices.elements(), {}, {});
+        pair.second.populateVertexVectors(feature, vertices.elements(), featureIndex, {}, {});
     }
 }
 
@@ -114,6 +110,15 @@ float CircleBucket::getQueryRadius(const RenderLayer& layer) const {
     float stroke = get<CircleStrokeWidth>(evaluated, layer.getID(), paintPropertyBinders);
     auto translate = evaluated.get<CircleTranslate>();
     return radius + stroke + util::length(translate[0], translate[1]);
+}
+
+void CircleBucket::update(const FeatureStates& states, const GeometryTileLayer& layer, const std::string& layerID,
+                          const ImagePositions& imagePositions) {
+    auto it = paintPropertyBinders.find(layerID);
+    if (it != paintPropertyBinders.end()) {
+        it->second.updateVertexVectors(states, layer, imagePositions);
+        uploaded = false;
+    }
 }
 
 } // namespace mbgl

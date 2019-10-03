@@ -1,7 +1,8 @@
 export BUILDTYPE ?= Debug
 export IS_LOCAL_DEVELOPMENT ?= true
-export WITH_CXX11ABI ?= $(shell scripts/check-cxx11abi.sh)
 export TARGET_BRANCH ?= master
+
+CMAKE ?= cmake
 
 
 ifeq ($(BUILDTYPE), Release)
@@ -84,7 +85,7 @@ endif
 
 $(MACOS_PROJ_PATH): $(BUILD_DEPS) $(MACOS_USER_DATA_PATH)/WorkspaceSettings.xcsettings
 	mkdir -p $(MACOS_OUTPUT_PATH)
-	(cd $(MACOS_OUTPUT_PATH) && cmake -G Xcode ../.. \
+	(cd $(MACOS_OUTPUT_PATH) && $(CMAKE) -G Xcode ../.. \
 		-DWITH_EGL=${WITH_EGL})
 
 $(MACOS_USER_DATA_PATH)/WorkspaceSettings.xcsettings: platform/macos/WorkspaceSettings.xcsettings
@@ -183,7 +184,7 @@ genstrings:
 
 $(MACOS_COMPDB_PATH)/Makefile:
 	mkdir -p $(MACOS_COMPDB_PATH)
-	(cd $(MACOS_COMPDB_PATH) && cmake ../../../.. \
+	(cd $(MACOS_COMPDB_PATH) && $(CMAKE) ../../../.. \
 		-DCMAKE_BUILD_TYPE=$(BUILDTYPE) \
 		-DWITH_EGL=${WITH_EGL})
 
@@ -213,9 +214,60 @@ IOS_XCODEBUILD_SIM = xcodebuild \
 	ARCHS=x86_64 ONLY_ACTIVE_ARCH=YES \
 	-derivedDataPath $(IOS_OUTPUT_PATH) \
 	-configuration $(BUILDTYPE) -sdk iphonesimulator \
-	-destination 'platform=iOS Simulator,name=iPhone 6,OS=latest' \
 	-workspace $(IOS_WORK_PATH) \
 	-jobs $(JOBS)
+
+ifneq ($(MORE_SIMULATORS),)
+	IOS_LATEST = true
+	IOS_11 = true
+	IOS_10 = true
+	IOS_9 = true
+endif
+
+ifdef IOS_LATEST
+	IOS_XCODEBUILD_SIM += \
+	-destination 'platform=iOS Simulator,OS=latest,name=iPhone 8' \
+	-destination 'platform=iOS Simulator,OS=latest,name=iPhone Xs Max' \
+	-destination 'platform=iOS Simulator,OS=latest,name=iPhone Xr' \
+	-destination 'platform=iOS Simulator,OS=latest,name=iPad Pro (11-inch)'
+endif
+
+ifdef IOS_11
+	IOS_XCODEBUILD_SIM += \
+	-destination 'platform=iOS Simulator,OS=11.4,name=iPhone 7' \
+	-destination 'platform=iOS Simulator,OS=11.4,name=iPhone X' \
+	-destination 'platform=iOS Simulator,OS=11.4,name=iPad (5th generation)'
+endif
+
+ifdef IOS_10
+	IOS_XCODEBUILD_SIM += \
+	-destination 'platform=iOS Simulator,OS=10.3.1,name=iPhone SE' \
+	-destination 'platform=iOS Simulator,OS=10.3.1,name=iPhone 7 Plus' \
+	-destination 'platform=iOS Simulator,OS=10.3.1,name=iPad Pro (9.7-inch)'
+endif
+
+ifdef IOS_9
+	IOS_XCODEBUILD_SIM += \
+	-destination 'platform=iOS Simulator,OS=9.3,name=iPhone 6s Plus' \
+	-destination 'platform=iOS Simulator,OS=9.3,name=iPhone 6s' \
+	-destination 'platform=iOS Simulator,OS=9.3,name=iPad Air 2'
+endif
+
+# If IOS_XCODEBUILD_SIM does not contain a simulator destination, add the default.
+ifeq (, $(findstring destination, $(IOS_XCODEBUILD_SIM)))
+	IOS_XCODEBUILD_SIM += \
+	-destination 'platform=iOS Simulator,OS=latest,name=iPhone 8'
+else
+	IOS_XCODEBUILD_SIM += -parallel-testing-enabled YES
+endif
+
+ifneq ($(ONLY_TESTING),)
+	IOS_XCODEBUILD_SIM += -only-testing:$(ONLY_TESTING)
+endif
+
+ifneq ($(SKIP_TESTING),)
+	IOS_XCODEBUILD_SIM += -skip-testing:$(SKIP_TESTING)
+endif
 
 ifneq ($(CI),)
 	IOS_XCODEBUILD_SIM += -xcconfig platform/darwin/ci.xcconfig
@@ -223,7 +275,7 @@ endif
 
 $(IOS_PROJ_PATH): $(IOS_USER_DATA_PATH)/WorkspaceSettings.xcsettings $(BUILD_DEPS)
 	mkdir -p $(IOS_OUTPUT_PATH)
-	(cd $(IOS_OUTPUT_PATH) && cmake -G Xcode ../.. \
+	(cd $(IOS_OUTPUT_PATH) && $(CMAKE) -G Xcode ../.. \
 		-DCMAKE_TOOLCHAIN_FILE=../../platform/ios/toolchain.cmake \
 		-DMBGL_PLATFORM=ios \
 		-DMASON_PLATFORM=ios)
@@ -241,9 +293,13 @@ iproj: $(IOS_PROJ_PATH)
 	xed $(IOS_WORK_PATH)
 
 .PHONY: ios-lint
-ios-lint:
+ios-lint: ios-pod-lint
 	find platform/ios/framework -type f -name '*.plist' | xargs plutil -lint
 	find platform/ios/app -type f -name '*.plist' | xargs plutil -lint
+
+.PHONY: ios-pod-lint
+ios-pod-lint:
+	./platform/ios/scripts/lint-podspecs.js
 
 .PHONY: ios-test
 ios-test: $(IOS_PROJ_PATH)
@@ -264,6 +320,12 @@ ios-sanitize-address: $(IOS_PROJ_PATH)
 .PHONY: ios-static-analyzer
 ios-static-analyzer: $(IOS_PROJ_PATH)
 	set -o pipefail && $(IOS_XCODEBUILD_SIM) analyze -scheme 'CI' test $(XCPRETTY)
+
+.PHONY: ios-install-simulators
+ios-install-simulators:
+	xcversion simulators --install="iOS 11.4" || true
+	xcversion simulators --install="iOS 10.3.1" || true
+	xcversion simulators --install="iOS 9.3" || true
 
 .PHONY: ios-check-events-symbols
 ios-check-events-symbols:
@@ -313,9 +375,8 @@ LINUX_BUILD = $(LINUX_OUTPUT_PATH)/build.ninja
 
 $(LINUX_BUILD): $(BUILD_DEPS)
 	mkdir -p $(LINUX_OUTPUT_PATH)
-	(cd $(LINUX_OUTPUT_PATH) && cmake -G Ninja ../../.. \
+	(cd $(LINUX_OUTPUT_PATH) && $(CMAKE) -G Ninja ../../.. \
 		-DCMAKE_BUILD_TYPE=$(BUILDTYPE) \
-		-DWITH_CXX11ABI=${WITH_CXX11ABI} \
 		-DWITH_COVERAGE=${WITH_COVERAGE} \
 		-DWITH_OSMESA=${WITH_OSMESA} \
 		-DWITH_EGL=${WITH_EGL})
@@ -392,117 +453,13 @@ check: compdb
 
 endif
 
-#### Qt targets #####################################################
-
-QT_QMAKE_FOUND := $(shell command -v qmake 2> /dev/null)
-ifdef QT_QMAKE_FOUND
-  export QT_INSTALL_DOCS = $(shell qmake -query QT_INSTALL_DOCS)
-  QT_ROOT_PATH = build/qt-$(BUILD_PLATFORM)-$(BUILD_PLATFORM_VERSION)
-endif
-
-export QT_OUTPUT_PATH = $(QT_ROOT_PATH)/$(BUILDTYPE)
-QT_BUILD = $(QT_OUTPUT_PATH)/build.ninja
-
-$(QT_BUILD): $(BUILD_DEPS)
-	@scripts/check-qt.sh
-	mkdir -p $(QT_OUTPUT_PATH)
-	(cd $(QT_OUTPUT_PATH) && cmake -G Ninja ../../.. \
-		-DCMAKE_BUILD_TYPE=$(BUILDTYPE) \
-		-DMBGL_PLATFORM=qt \
-		-DMASON_PLATFORM=$(MASON_PLATFORM) \
-		-DMASON_PLATFORM_VERSION=$(MASON_PLATFORM_VERSION) \
-		-DWITH_QT_DECODERS=${WITH_QT_DECODERS} \
-		-DWITH_QT_I18N=${WITH_QT_I18N} \
-		-DWITH_CXX11ABI=${WITH_CXX11ABI} \
-		-DWITH_COVERAGE=${WITH_COVERAGE})
-
-ifeq ($(HOST_PLATFORM), macos)
-
-MACOS_QT_PROJ_PATH = $(QT_ROOT_PATH)/xcode/mbgl.xcodeproj
-$(MACOS_QT_PROJ_PATH): $(BUILD_DEPS)
-	@scripts/check-qt.sh
-	mkdir -p $(QT_ROOT_PATH)/xcode
-	(cd $(QT_ROOT_PATH)/xcode && cmake -G Xcode ../../.. \
-		-DMBGL_PLATFORM=qt \
-		-DMASON_PLATFORM=$(MASON_PLATFORM) \
-		-DMASON_PLATFORM_VERSION=$(MASON_PLATFORM_VERSION) \
-		-DWITH_QT_DECODERS=${WITH_QT_DECODERS} \
-		-DWITH_QT_I18N=${WITH_QT_I18N} \
-		-DWITH_CXX11ABI=${WITH_CXX11ABI} \
-		-DWITH_COVERAGE=${WITH_COVERAGE})
-
-.PHONY: qtproj
-qtproj: $(MACOS_QT_PROJ_PATH)
-	open $(MACOS_QT_PROJ_PATH)
-
-endif
-
-ifdef QNX_HOST
-export WITH_QT_DECODERS ?= ON
-export QCC_COMPILER_TARGET ?= gcc_ntox86_64
-export QCC_NTOARCH ?= x86_64
-
-export QNX_OUTPUT_PATH = build/qt-qnx-$(QCC_NTOARCH)/$(BUILDTYPE)
-QNX_QT_BUILD = $(QNX_OUTPUT_PATH)/build.ninja
-$(QNX_QT_BUILD): $(BUILD_DEPS)
-	@scripts/check-qt.sh
-	mkdir -p $(QNX_OUTPUT_PATH)
-	(cd $(QNX_OUTPUT_PATH) && cmake -G Ninja ../../.. \
-		-DCMAKE_BUILD_TYPE=$(BUILDTYPE) \
-		-DQCC_COMPILER_TARGET=${QCC_COMPILER_TARGET} \
-		-DQCC_NTOARCH=${QCC_NTOARCH} \
-		-DCMAKE_TOOLCHAIN_FILE=platform/qt/qnx.cmake \
-		-DMBGL_PLATFORM=qt \
-		-DWITH_QT_DECODERS=${WITH_QT_DECODERS} \
-		-DWITH_QT_I18N=${WITH_QT_I18N} \
-		-DWITH_CXX11ABI=${WITH_CXX11ABI} \
-		-DWITH_COVERAGE=${WITH_COVERAGE})
-
-.PHONY: qnx-qt-lib
-qnx-qt-lib: $(QNX_QT_BUILD)
-	$(NINJA) $(NINJA_ARGS) -j$(JOBS) -C $(QNX_OUTPUT_PATH) qmapboxgl
-
-endif
-
-.PHONY: qt-lib
-qt-lib: $(QT_BUILD)
-	$(NINJA) $(NINJA_ARGS) -j$(JOBS) -C $(QT_OUTPUT_PATH) qmapboxgl
-
-.PHONY: qt-app
-qt-app: $(QT_BUILD)
-	$(NINJA) $(NINJA_ARGS) -j$(JOBS) -C $(QT_OUTPUT_PATH) mbgl-qt
-
-.PHONY: run-qt-app
-run-qt-app: qt-app
-	$(QT_OUTPUT_PATH)/mbgl-qt
-
-.PHONY: qt-test
-qt-test: $(QT_BUILD)
-	$(NINJA) $(NINJA_ARGS) -j$(JOBS) -C $(QT_OUTPUT_PATH) mbgl-test
-
-run-qt-test-%: qt-test
-	$(QT_OUTPUT_PATH)/mbgl-test --gtest_catch_exceptions=0 --gtest_filter=$*
-
-.PHONY: run-qt-test
-run-qt-test: run-qt-test-*
-
-.PHONY: qt-docs
-qt-docs:
-	qdoc $(shell pwd)/platform/qt/config.qdocconf -outputdir $(shell pwd)/$(QT_OUTPUT_PATH)/docs
-
 #### Node targets ##############################################################
 
 .PHONY: test-node
 test-node: node
 	npm test
-	npm run test-suite
-
-.PHONY: test-node-recycle-map
-test-node-recycle-map: node
-	npm test
-	npm run test-render -- --recycle-map --shuffle
 	npm run test-query
-	npm run test-expressions
+	npm run test-memory
 
 #### Android targets ###########################################################
 
@@ -716,6 +673,11 @@ apackage: platform/android/gradle/configuration.gradle
 android-ui-test: platform/android/gradle/configuration.gradle
 	cd platform/android && $(MBGL_ANDROID_GRADLE) -Pmapbox.abis=all :MapboxGLAndroidSDKTestApp:assembleDebug :MapboxGLAndroidSDKTestApp:assembleAndroidTest
 
+#Run instrumentations tests on MicroSoft App Center
+.PHONY: run-android-test-app-center
+run-android-test-app-center:
+	cd platform/android && appcenter test run espresso --app "mapboxcn-outlook.com/MapsSdk" --devices "mapboxcn-outlook.com/china" --app-path MapboxGLAndroidSDKTestApp/build/outputs/apk/debug/MapboxGLAndroidSDKTestApp-debug.apk  --test-series "master" --locale "en_US" --build-dir MapboxGLAndroidSDKTestApp/build/outputs/apk/androidTest/debug
+
 # Uploads the compiled Android SDK to Bintray
 .PHONY: run-android-upload-to-bintray
 run-android-upload-to-bintray: platform/android/gradle/configuration.gradle
@@ -736,21 +698,26 @@ android-gfxinfo:
 test-code-android:
 	node platform/android/scripts/generate-test-code.js
 
-# Runs checkstyle and lint on the Android code
+# Runs checkstyle and lint on the java code
 .PHONY: android-check
-android-check : android-checkstyle android-lint-sdk android-lint-test-app
+android-check : android-ktlint android-checkstyle android-lint-sdk android-lint-test-app run-android-nitpick
 
-# Runs checkstyle on the Android code
+# Runs checkstyle on the java code
 .PHONY: android-checkstyle
 android-checkstyle: platform/android/gradle/configuration.gradle
 	cd platform/android && $(MBGL_ANDROID_GRADLE) -Pmapbox.abis=none :MapboxGLAndroidSDK:checkstyle :MapboxGLAndroidSDKTestApp:checkstyle
 
-# Runs lint on the Android SDK code
+# Runs checkstyle on the kotlin code
+.PHONY: android-ktlint
+android-ktlint: platform/android/gradle/configuration.gradle
+	cd platform/android && $(MBGL_ANDROID_GRADLE) -Pmapbox.abis=none ktlint
+
+# Runs lint on the Android SDK java code
 .PHONY: android-lint-sdk
 android-lint-sdk: platform/android/gradle/configuration.gradle
 	cd platform/android && $(MBGL_ANDROID_GRADLE) -Pmapbox.abis=none :MapboxGLAndroidSDK:lint
 
-# Runs lint on the Android test app code
+# Runs lint on the Android test app java code
 .PHONY: android-lint-test-app
 android-lint-test-app: platform/android/gradle/configuration.gradle
 	cd platform/android && $(MBGL_ANDROID_GRADLE) -Pmapbox.abis=none :MapboxGLAndroidSDKTestApp:lint

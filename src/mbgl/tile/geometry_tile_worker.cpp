@@ -37,13 +37,12 @@ GeometryTileWorker::GeometryTileWorker(ActorRef<GeometryTileWorker> self_,
                                        const bool showCollisionBoxes_)
     : self(std::move(self_)),
       parent(std::move(parent_)),
-      id(std::move(id_)),
+      id(id_),
       sourceID(std::move(sourceID_)),
       obsolete(obsolete_),
       mode(mode_),
       pixelRatio(pixelRatio_),
-      showCollisionBoxes(showCollisionBoxes_) {
-}
+      showCollisionBoxes(showCollisionBoxes_) {}
 
 GeometryTileWorker::~GeometryTileWorker() = default;
 
@@ -117,10 +116,11 @@ GeometryTileWorker::~GeometryTileWorker() = default;
    completed parse.
 */
 
-void GeometryTileWorker::setData(std::unique_ptr<const GeometryTileData> data_, uint64_t correlationID_) {
+void GeometryTileWorker::setData(std::unique_ptr<const GeometryTileData> data_, bool resetLayers_, uint64_t correlationID_) {
     try {
         data = std::move(data_);
         correlationID = correlationID_;
+        if (resetLayers_) layers = nullopt;
 
         switch (state) {
         case Idle:
@@ -382,8 +382,8 @@ void GeometryTileWorker::parse() {
                 if (!filter(expression::EvaluationContext { static_cast<float>(this->id.overscaledZ), feature.get() }))
                     continue;
 
-                GeometryCollection geometries = feature->getGeometries();
-                bucket->addFeature(*feature, geometries, {}, PatternLayerMap ());
+                const GeometryCollection& geometries = feature->getGeometries();
+                bucket->addFeature(*feature, geometries, {}, PatternLayerMap(), i);
                 featureIndex->insert(geometries, i, sourceLayerID, leaderImpl.id);
             }
 
@@ -460,12 +460,12 @@ void GeometryTileWorker::finalizeLayout() {
                        " Canonical: " << static_cast<int>(id.canonical.z) << "/" << id.canonical.x << "/" << id.canonical.y <<
                        " Time");
 
-    parent.invoke(&GeometryTile::onLayout, GeometryTile::LayoutResult {
+    parent.invoke(&GeometryTile::onLayout, std::make_shared<GeometryTile::LayoutResult>(
         std::move(renderData),
         std::move(featureIndex),
         std::move(glyphAtlasImage),
         std::move(iconAtlas)
-    }, correlationID);
+    ), correlationID);
 }
 
 } // namespace mbgl

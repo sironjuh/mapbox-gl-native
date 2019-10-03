@@ -16,8 +16,8 @@ template <>
 struct ShaderSource<HillshadeProgram> {
     static constexpr const char* name = "hillshade";
     static constexpr const uint8_t hash[8] = { 0x8a, 0x11, 0x29, 0x18, 0x52, 0x7f, 0x3b, 0xbb };
-    static constexpr const auto vertexOffset = 29113;
-    static constexpr const auto fragmentOffset = 29284;
+    static constexpr const auto vertexOffset = 29125;
+    static constexpr const auto fragmentOffset = 29296;
 };
 
 constexpr const char* ShaderSource<HillshadeProgram>::name;
@@ -29,8 +29,8 @@ constexpr const uint8_t ShaderSource<HillshadeProgram>::hash[8];
 namespace gfx {
 
 template <>
-std::unique_ptr<Program<HillshadeProgram>>
-Context::createProgram<gl::Context>(const ProgramParameters& programParameters) {
+std::unique_ptr<gfx::Program<HillshadeProgram>>
+Backend::Create<gfx::Backend::Type::OpenGL>(const ProgramParameters& programParameters) {
     return std::make_unique<gl::Program<HillshadeProgram>>(programParameters);
 }
 

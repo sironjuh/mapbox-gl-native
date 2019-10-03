@@ -43,7 +43,6 @@
 #include <mbgl/util/projection.hpp>
 #include <mbgl/util/rapidjson.hpp>
 #include <mbgl/util/run_loop.hpp>
-#include <mbgl/util/shared_thread_pool.hpp>
 #include <mbgl/util/traits.hpp>
 #include <mbgl/actor/scheduler.hpp>
 
@@ -440,8 +439,7 @@ void QMapboxGLSettings::setLocalFontFamily(const QString &family)
 /*!
     Returns resource transformation callback used to transform requested URLs.
 */
-std::function<std::string(const std::string &&)> QMapboxGLSettings::resourceTransform() const
-{
+std::function<std::string(const std::string &)> QMapboxGLSettings::resourceTransform() const {
     return m_resourceTransform;
 }
 
@@ -453,8 +451,7 @@ std::function<std::string(const std::string &&)> QMapboxGLSettings::resourceTran
     used add or remove custom parameters, or reroute certain requests to other
     servers or endpoints.
 */
-void QMapboxGLSettings::setResourceTransform(const std::function<std::string(const std::string &&)> &transform)
-{
+void QMapboxGLSettings::setResourceTransform(const std::function<std::string(const std::string &)> &transform) {
     m_resourceTransform = transform;
 }
 
@@ -1724,7 +1721,6 @@ mbgl::ResourceOptions resourceOptionsFromQMapboxGLSettings(const QMapboxGLSettin
 
 QMapboxGLPrivate::QMapboxGLPrivate(QMapboxGL *q, const QMapboxGLSettings &settings, const QSize &size, qreal pixelRatio_)
     : QObject(q)
-    , m_threadPool(mbgl::sharedThreadPool())
     , m_mode(settings.contextMode())
     , m_pixelRatio(pixelRatio_)
     , m_localFontFamily(settings.localFontFamily())
@@ -1741,13 +1737,14 @@ QMapboxGLPrivate::QMapboxGLPrivate(QMapboxGL *q, const QMapboxGLSettings &settin
     auto resourceOptions = resourceOptionsFromQMapboxGLSettings(settings);
 
     // Setup the Map object.
-    mapObj = std::make_unique<mbgl::Map>(*this, *m_mapObserver, *m_threadPool,
+    mapObj = std::make_unique<mbgl::Map>(*this, *m_mapObserver,
                                          mapOptionsFromQMapboxGLSettings(settings, size, m_pixelRatio),
                                          resourceOptions);
 
      if (settings.resourceTransform()) {
-         m_resourceTransform = std::make_unique<mbgl::Actor<mbgl::ResourceTransform>>(*mbgl::Scheduler::GetCurrent(),
-             [callback = settings.resourceTransform()] (mbgl::Resource::Kind, const std::string &&url_) -> std::string {
+         m_resourceTransform = std::make_unique<mbgl::Actor<mbgl::ResourceTransform>>(
+             *mbgl::Scheduler::GetCurrent(),
+             [callback = settings.resourceTransform()](mbgl::Resource::Kind, const std::string &url_) -> std::string {
                  return callback(std::move(url_));
              });
          auto fs = mbgl::FileSource::getSharedFileSource(resourceOptions);
@@ -1799,7 +1796,6 @@ void QMapboxGLPrivate::createRenderer()
 
     m_mapRenderer = std::make_unique<QMapboxGLMapRenderer>(
         m_pixelRatio,
-        *m_threadPool,
         m_mode,
         m_localFontFamily
     );

@@ -2,7 +2,6 @@
 
 #include <mbgl/renderer/renderer.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/util/shared_thread_pool.hpp>
 #include <mbgl/util/logging.hpp>
 #include <mbgl/util/string.hpp>
 #include <mbgl/actor/scheduler.hpp>
@@ -24,11 +23,9 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
                                const jni::Object<LatLngBounds>& region,
                                const jni::Object<CameraPosition>& position,
                                jni::jboolean _showLogo,
-                               const jni::String& _programCacheDir,
                                const jni::String& _localIdeographFontFamily)
         : javaPeer(_env, _obj)
-        , pixelRatio(_pixelRatio)
-        , threadPool(sharedThreadPool()) {
+        , pixelRatio(_pixelRatio) {
 
     // Get a reference to the JavaVM for callbacks
     if (_env.GetJavaVM(&vm) < 0) {
@@ -41,7 +38,7 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
 
     optional<mbgl::CameraOptions> cameraOptions;
     if (position) {
-        cameraOptions = CameraPosition::getCameraOptions(_env, position);
+        cameraOptions = CameraPosition::getCameraOptions(_env, position, pixelRatio);
     }
 
     optional<mbgl::LatLngBounds> bounds;
@@ -58,13 +55,11 @@ MapSnapshotter::MapSnapshotter(jni::JNIEnv& _env,
 
     showLogo = _showLogo;
     // Create the core snapshotter
-    snapshotter = std::make_unique<mbgl::MapSnapshotter>(threadPool,
-                                                         style,
+    snapshotter = std::make_unique<mbgl::MapSnapshotter>(style,
                                                          size,
                                                          pixelRatio,
                                                          cameraOptions,
                                                          bounds,
-                                                         jni::Make<std::string>(_env, _programCacheDir),
                                                          _localIdeographFontFamily ?
                                                             jni::Make<std::string>(_env, _localIdeographFontFamily) :
                                                             optional<std::string>{},
@@ -129,7 +124,7 @@ void MapSnapshotter::setSize(JNIEnv&, jni::jint width, jni::jint height) {
 }
 
 void MapSnapshotter::setCameraPosition(JNIEnv& env, const jni::Object<CameraPosition>& position) {
-    auto options = CameraPosition::getCameraOptions(env, position);
+    auto options = CameraPosition::getCameraOptions(env, position, pixelRatio);
     snapshotter->setCameraOptions(options);
 }
 
@@ -164,7 +159,7 @@ void MapSnapshotter::registerNative(jni::JNIEnv& env) {
 
     // Register the peer
     jni::RegisterNativePeer<MapSnapshotter>(env, javaClass, "nativePtr",
-                                            jni::MakePeer<MapSnapshotter, const jni::Object<MapSnapshotter>&, const jni::Object<FileSource>&, jni::jfloat, jni::jint, jni::jint, const jni::String&, const jni::String&, const jni::Object<LatLngBounds>&, const jni::Object<CameraPosition>&, jni::jboolean, const jni::String&, const jni::String&>,
+                                            jni::MakePeer<MapSnapshotter, const jni::Object<MapSnapshotter>&, const jni::Object<FileSource>&, jni::jfloat, jni::jint, jni::jint, const jni::String&, const jni::String&, const jni::Object<LatLngBounds>&, const jni::Object<CameraPosition>&, jni::jboolean, const jni::String&>,
                                            "nativeInitialize",
                                            "finalize",
                                             METHOD(&MapSnapshotter::setStyleUrl, "setStyleUrl"),

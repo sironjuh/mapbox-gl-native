@@ -45,16 +45,16 @@ macro(mbgl_platform_core)
         PRIVATE platform/linux/src/gl_functions.cpp
 
         # Misc
+        PRIVATE platform/default/src/mbgl/i18n/collator.cpp
+        PRIVATE platform/default/src/mbgl/i18n/number_format.cpp
+        PRIVATE platform/default/src/mbgl/text/bidi.cpp
+        PRIVATE platform/default/src/mbgl/text/local_glyph_rasterizer.cpp
+        PRIVATE platform/default/src/mbgl/layermanager/layer_manager.cpp
+        PRIVATE platform/default/src/mbgl/util/compression.cpp
         PRIVATE platform/default/src/mbgl/util/logging_stderr.cpp
         PRIVATE platform/default/src/mbgl/util/string_stdlib.cpp
         PRIVATE platform/default/src/mbgl/util/thread.cpp
-        PRIVATE platform/default/src/mbgl/text/bidi.cpp
-        PRIVATE platform/default/src/mbgl/text/collator.cpp
-        PRIVATE platform/default/src/mbgl/layermanager/layer_manager.cpp
-        PRIVATE platform/default/src/mbgl/text/local_glyph_rasterizer.cpp
         PRIVATE platform/default/src/mbgl/util/thread_local.cpp
-        PRIVATE platform/default/src/mbgl/text/unaccent.cpp
-        PRIVATE platform/default/include/mbgl/text/unaccent.hpp
         PRIVATE platform/default/src/mbgl/util/utf.cpp
 
         # Image handling
@@ -64,19 +64,16 @@ macro(mbgl_platform_core)
         PRIVATE platform/default/src/mbgl/util/png_reader.cpp
 
         # Headless view
-        PRIVATE platform/default/src/mbgl/gl/headless_frontend.cpp
-        PRIVATE platform/default/include/mbgl/gl/headless_frontend.hpp
+        PRIVATE platform/default/src/mbgl/gfx/headless_frontend.cpp
+        PRIVATE platform/default/include/mbgl/gfx/headless_frontend.hpp
+        PRIVATE platform/default/src/mbgl/gfx/headless_backend.cpp
+        PRIVATE platform/default/include/mbgl/gfx/headless_backend.hpp
         PRIVATE platform/default/src/mbgl/gl/headless_backend.cpp
         PRIVATE platform/default/include/mbgl/gl/headless_backend.hpp
 
         # Snapshotting
         PRIVATE platform/default/src/mbgl/map/map_snapshotter.cpp
         PRIVATE platform/default/include/mbgl/map/map_snapshotter.hpp
-
-        # Thread pool
-        PRIVATE platform/default/src/mbgl/util/default_thread_pool.cpp
-        PRIVATE platform/default/src/mbgl/util/default_thread_pool.cpp
-        PRIVATE platform/default/src/mbgl/util/shared_thread_pool.cpp
     )
 
     target_include_directories(mbgl-core
@@ -86,20 +83,23 @@ macro(mbgl_platform_core)
 
     target_add_mason_package(mbgl-core PUBLIC libpng)
     target_add_mason_package(mbgl-core PUBLIC libjpeg-turbo)
+    target_add_mason_package(mbgl-core PRIVATE icu)
+
+    # Ignore warning caused by ICU header unistr.h in some CI environments
+    set_source_files_properties(platform/default/src/mbgl/i18n/number_format.cpp PROPERTIES COMPILE_FLAGS -Wno-error=shadow)
+
+    # Link all ICU libraries (by default only libicuuc is linked)
+    find_library(LIBICUI18N NAMES icui18n HINTS ${MASON_PACKAGE_icu_INCLUDE_DIRS}/../lib)
+    find_library(LIBICUUC NAMES icuuc HINTS ${MASON_PACKAGE_icu_INCLUDE_DIRS}/../lib)
+    find_library(LIBICUDATA NAMES icudata HINTS ${MASON_PACKAGE_icu_INCLUDE_DIRS}/../lib)
 
     target_link_libraries(mbgl-core
-        PRIVATE nunicode
-        PRIVATE icu
+        PRIVATE ${LIBICUI18N}
+        PRIVATE ${LIBICUUC}
+        PRIVATE ${LIBICUDATA}
+        PRIVATE mbgl-vendor-nunicode
         PUBLIC -lz
     )
-
-    if(WITH_CXX11ABI)
-        # Statically link libstdc++ when we're using the new STL ABI
-        target_link_libraries(mbgl-core
-            PUBLIC -static-libstdc++
-            PUBLIC -Wl,-Bsymbolic-functions
-        )
-    endif()
 endmacro()
 
 

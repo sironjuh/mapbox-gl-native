@@ -9,6 +9,7 @@
 #include <mbgl/style/conversion/transition_options.hpp>
 #include <mbgl/style/conversion/json.hpp>
 #include <mbgl/style/conversion_impl.hpp>
+#include <mbgl/util/traits.hpp>
 
 #include <mapbox/eternal.hpp>
 
@@ -18,13 +19,13 @@ namespace style {
 
 // static
 const LayerTypeInfo* HeatmapLayer::Impl::staticTypeInfo() noexcept {
-    const static LayerTypeInfo typeInfo
-        {"heatmap",
-          LayerTypeInfo::Source::Required,
-          LayerTypeInfo::Pass3D::Required,
-          LayerTypeInfo::Layout::NotRequired,
-          LayerTypeInfo::FadingTiles::NotRequired
-        };
+    const static LayerTypeInfo typeInfo{"heatmap",
+                                        LayerTypeInfo::Source::Required,
+                                        LayerTypeInfo::Pass3D::Required,
+                                        LayerTypeInfo::Layout::NotRequired,
+                                        LayerTypeInfo::FadingTiles::NotRequired,
+                                        LayerTypeInfo::CrossTileIndex::NotRequired,
+                                        LayerTypeInfo::TileKind::Geometry};
     return &typeInfo;
 }
 
@@ -201,36 +202,45 @@ TransitionOptions HeatmapLayer::getHeatmapWeightTransition() const {
 
 using namespace conversion;
 
+namespace {
+
+enum class Property : uint8_t {
+    HeatmapColor,
+    HeatmapIntensity,
+    HeatmapOpacity,
+    HeatmapRadius,
+    HeatmapWeight,
+    HeatmapColorTransition,
+    HeatmapIntensityTransition,
+    HeatmapOpacityTransition,
+    HeatmapRadiusTransition,
+    HeatmapWeightTransition,
+};
+
+template <typename T>
+constexpr uint8_t toUint8(T t) noexcept {
+    return uint8_t(mbgl::underlying_type(t));
+}
+
+MAPBOX_ETERNAL_CONSTEXPR const auto layerProperties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>(
+    {{"heatmap-color", toUint8(Property::HeatmapColor)},
+     {"heatmap-intensity", toUint8(Property::HeatmapIntensity)},
+     {"heatmap-opacity", toUint8(Property::HeatmapOpacity)},
+     {"heatmap-radius", toUint8(Property::HeatmapRadius)},
+     {"heatmap-weight", toUint8(Property::HeatmapWeight)},
+     {"heatmap-color-transition", toUint8(Property::HeatmapColorTransition)},
+     {"heatmap-intensity-transition", toUint8(Property::HeatmapIntensityTransition)},
+     {"heatmap-opacity-transition", toUint8(Property::HeatmapOpacityTransition)},
+     {"heatmap-radius-transition", toUint8(Property::HeatmapRadiusTransition)},
+     {"heatmap-weight-transition", toUint8(Property::HeatmapWeightTransition)}});
+
+constexpr uint8_t lastPaintPropertyIndex = toUint8(Property::HeatmapWeightTransition);
+} // namespace
+
 optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Convertible& value) {
-    enum class Property : uint8_t {
-        HeatmapColor,
-        HeatmapIntensity,
-        HeatmapOpacity,
-        HeatmapRadius,
-        HeatmapWeight,
-        HeatmapColorTransition,
-        HeatmapIntensityTransition,
-        HeatmapOpacityTransition,
-        HeatmapRadiusTransition,
-        HeatmapWeightTransition,
-    };
-
-    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
-        { "heatmap-color", static_cast<uint8_t>(Property::HeatmapColor) },
-        { "heatmap-intensity", static_cast<uint8_t>(Property::HeatmapIntensity) },
-        { "heatmap-opacity", static_cast<uint8_t>(Property::HeatmapOpacity) },
-        { "heatmap-radius", static_cast<uint8_t>(Property::HeatmapRadius) },
-        { "heatmap-weight", static_cast<uint8_t>(Property::HeatmapWeight) },
-        { "heatmap-color-transition", static_cast<uint8_t>(Property::HeatmapColorTransition) },
-        { "heatmap-intensity-transition", static_cast<uint8_t>(Property::HeatmapIntensityTransition) },
-        { "heatmap-opacity-transition", static_cast<uint8_t>(Property::HeatmapOpacityTransition) },
-        { "heatmap-radius-transition", static_cast<uint8_t>(Property::HeatmapRadiusTransition) },
-        { "heatmap-weight-transition", static_cast<uint8_t>(Property::HeatmapWeightTransition) }
-    });
-
-    const auto it = properties.find(name.c_str());
-    if (it == properties.end()) {
-        return Error { "layer doesn't support this property" };
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end() || it->second > lastPaintPropertyIndex) {
+        return Error{"layer doesn't support this property"};
     }
 
     auto property = static_cast<Property>(it->second);
@@ -292,34 +302,64 @@ optional<Error> HeatmapLayer::setPaintProperty(const std::string& name, const Co
     if (!transition) {
         return error;
     }
-    
+
     if (property == Property::HeatmapColorTransition) {
         setHeatmapColorTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::HeatmapIntensityTransition) {
         setHeatmapIntensityTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::HeatmapOpacityTransition) {
         setHeatmapOpacityTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::HeatmapRadiusTransition) {
         setHeatmapRadiusTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::HeatmapWeightTransition) {
         setHeatmapWeightTransition(*transition);
         return nullopt;
     }
-    
 
-    return Error { "layer doesn't support this property" };
+    return Error{"layer doesn't support this property"};
+}
+
+StyleProperty HeatmapLayer::getProperty(const std::string& name) const {
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end()) {
+        return {};
+    }
+
+    switch (static_cast<Property>(it->second)) {
+        case Property::HeatmapColor:
+            return makeStyleProperty(getHeatmapColor());
+        case Property::HeatmapIntensity:
+            return makeStyleProperty(getHeatmapIntensity());
+        case Property::HeatmapOpacity:
+            return makeStyleProperty(getHeatmapOpacity());
+        case Property::HeatmapRadius:
+            return makeStyleProperty(getHeatmapRadius());
+        case Property::HeatmapWeight:
+            return makeStyleProperty(getHeatmapWeight());
+        case Property::HeatmapColorTransition:
+            return makeStyleProperty(getHeatmapColorTransition());
+        case Property::HeatmapIntensityTransition:
+            return makeStyleProperty(getHeatmapIntensityTransition());
+        case Property::HeatmapOpacityTransition:
+            return makeStyleProperty(getHeatmapOpacityTransition());
+        case Property::HeatmapRadiusTransition:
+            return makeStyleProperty(getHeatmapRadiusTransition());
+        case Property::HeatmapWeightTransition:
+            return makeStyleProperty(getHeatmapWeightTransition());
+    }
+    return {};
 }
 
 optional<Error> HeatmapLayer::setLayoutProperty(const std::string& name, const Convertible& value) {

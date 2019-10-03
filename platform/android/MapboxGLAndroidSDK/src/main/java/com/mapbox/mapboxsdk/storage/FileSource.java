@@ -4,14 +4,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.res.AssetManager;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
-
 import com.mapbox.mapboxsdk.MapStrictMode;
 import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.constants.MapboxConstants;
@@ -20,7 +18,6 @@ import com.mapbox.mapboxsdk.utils.FileUtils;
 import com.mapbox.mapboxsdk.utils.ThreadUtils;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -69,14 +66,14 @@ public class FileSource {
      *
      * @param path the path of the current resources cache database
      */
-    void onSuccess(String path);
+    void onSuccess(@NonNull String path);
 
     /**
      * Receives an error message if setting the path was not successful
      *
      * @param message the error message
      */
-    void onError(String message);
+    void onError(@NonNull String message);
 
   }
 
@@ -92,7 +89,7 @@ public class FileSource {
   @UiThread
   public static synchronized FileSource getInstance(@NonNull Context context) {
     if (INSTANCE == null) {
-      INSTANCE = new FileSource(getResourcesCachePath(context), context.getResources().getAssets());
+      INSTANCE = new FileSource(getResourcesCachePath(context));
     }
 
     return INSTANCE;
@@ -265,73 +262,87 @@ public class FileSource {
   /**
    * Changes the path of the resources cache database.
    * Note that the external storage setting needs to be activated in the manifest.
+   * <p>
+   * The callback reference is <b>strongly kept</b> throughout the process,
+   * so it needs to be wrapped in a weak reference or released on the client side if necessary.
    *
    * @param context  the context of the path
    * @param path     the new database path
    * @param callback the callback to obtain the result
+   * @deprecated Use {@link #setResourcesCachePath(String, ResourcesCachePathChangeCallback)}
    */
-  public static void setResourcesCachePath(@NonNull Context context,
+  @Deprecated
+  public static void setResourcesCachePath(@NonNull final Context context,
                                            @NonNull final String path,
-                                           @NonNull ResourcesCachePathChangeCallback callback) {
-    final String fileSourceActivatedMessage = "Cannot set path, file source is activated."
-      + " Make sure that the map or a resources download is not running.";
-    if (getInstance(context).isActivated()) {
+                                           @NonNull final ResourcesCachePathChangeCallback callback) {
+    setResourcesCachePath(path, callback);
+  }
+
+  /**
+   * Changes the path of the resources cache database.
+   * Note that the external storage setting needs to be activated in the manifest.
+   * <p>
+   * The callback reference is <b>strongly kept</b> throughout the process,
+   * so it needs to be wrapped in a weak reference or released on the client side if necessary.
+   *
+   * @param path     the new database path
+   * @param callback the callback to obtain the result
+   */
+  public static void setResourcesCachePath(@NonNull final String path,
+                                           @NonNull final ResourcesCachePathChangeCallback callback) {
+    final Context applicationContext = Mapbox.getApplicationContext();
+    final FileSource fileSource = FileSource.getInstance(applicationContext);
+
+    if (fileSource.isActivated()) {
+      String fileSourceActivatedMessage = "Cannot set path, file source is activated."
+        + " Make sure that the map or a resources download is not running.";
       Logger.w(TAG, fileSourceActivatedMessage);
       callback.onError(fileSourceActivatedMessage);
-    } else if (path.equals(resourcesCachePath)) {
+    } else if (path.equals(getResourcesCachePath(applicationContext))) {
       // no need to change the path
       callback.onSuccess(path);
     } else {
-      final WeakReference<Context> contextWeakReference = new WeakReference<>(context);
-      final WeakReference<ResourcesCachePathChangeCallback> callbackWeakReference = new WeakReference<>(callback);
       new FileUtils.CheckFileWritePermissionTask(new FileUtils.OnCheckFileWritePermissionListener() {
         @Override
         public void onWritePermissionGranted() {
-          final Context context = contextWeakReference.get();
-          final ResourcesCachePathChangeCallback callback = callbackWeakReference.get();
-
-          if (callback == null) {
-            Logger.w(TAG, "Lost callback reference.");
-            return;
-          } else if (context == null) {
-            String lostContextMessage = "Lost context reference.";
-            Logger.w(TAG, lostContextMessage);
-            callback.onError(lostContextMessage);
-            return;
-          }
-
-          // verify fileSource's activation again after the async task returns
-          if (getInstance(context).isActivated()) {
-            Logger.w(TAG, fileSourceActivatedMessage);
-            callback.onError(fileSourceActivatedMessage);
-          } else {
-            final SharedPreferences.Editor editor =
-              context.getSharedPreferences(MapboxConstants.MAPBOX_SHARED_PREFERENCES, Context.MODE_PRIVATE).edit();
-            editor.putString(MAPBOX_SHARED_PREFERENCE_RESOURCES_CACHE_PATH, path);
-            editor.apply();
-            setResourcesCachePath(context, path);
-            callback.onSuccess(path);
-          }
+          final SharedPreferences.Editor editor =
+            applicationContext.getSharedPreferences(MapboxConstants.MAPBOX_SHARED_PREFERENCES,
+              Context.MODE_PRIVATE).edit();
+          editor.putString(MAPBOX_SHARED_PREFERENCE_RESOURCES_CACHE_PATH, path);
+          editor.apply();
+          internalSetResourcesCachePath(applicationContext, path, callback);
         }
 
         @Override
         public void onError() {
-          final ResourcesCachePathChangeCallback callback = callbackWeakReference.get();
-          if (callback != null) {
-            String message = "Path is not writable: " + path;
-            Logger.e(TAG, message);
-            callback.onError(message);
-          }
+          String message = "Path is not writable: " + path;
+          Logger.e(TAG, message);
+          callback.onError(message);
         }
       }).execute(new File(path));
     }
   }
 
-  private static void setResourcesCachePath(@NonNull Context context, @NonNull String path) {
-    resourcesCachePathLoaderLock.lock();
-    resourcesCachePath = path;
-    resourcesCachePathLoaderLock.unlock();
-    getInstance(context).setResourceCachePath(path);
+  private static void internalSetResourcesCachePath(@NonNull Context context, @NonNull String path,
+                                                    @NonNull final ResourcesCachePathChangeCallback callback) {
+    final FileSource fileSource = getInstance(context);
+    fileSource.setResourceCachePath(path, new ResourcesCachePathChangeCallback() {
+      @Override
+      public void onSuccess(@NonNull String path) {
+        fileSource.deactivate();
+        resourcesCachePathLoaderLock.lock();
+        resourcesCachePath = path;
+        resourcesCachePathLoaderLock.unlock();
+        callback.onSuccess(path);
+      }
+
+      @Override
+      public void onError(@NonNull String message) {
+        fileSource.deactivate();
+        callback.onError(message);
+      }
+    });
+    fileSource.activate();
   }
 
   private static boolean isPathWritable(String path) {
@@ -354,8 +365,8 @@ public class FileSource {
   @Keep
   private long nativePtr;
 
-  private FileSource(String cachePath, AssetManager assetManager) {
-    initialize(Mapbox.getAccessToken(), cachePath, assetManager);
+  private FileSource(String cachePath) {
+    initialize(Mapbox.getAccessToken(), cachePath);
   }
 
   @Keep
@@ -368,7 +379,7 @@ public class FileSource {
   public native void deactivate();
 
   @Keep
-  public native void setAccessToken(@NonNull String accessToken);
+  public native void setAccessToken(String accessToken);
 
   @NonNull
   @Keep
@@ -389,10 +400,10 @@ public class FileSource {
   public native void setResourceTransform(final ResourceTransformCallback callback);
 
   @Keep
-  private native void setResourceCachePath(String path);
+  private native void setResourceCachePath(String path, ResourcesCachePathChangeCallback callback);
 
   @Keep
-  private native void initialize(String accessToken, String cachePath, AssetManager assetManager);
+  private native void initialize(String accessToken, String cachePath);
 
   @Override
   @Keep

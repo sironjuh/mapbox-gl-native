@@ -129,6 +129,11 @@ public:
     uint64_t completedTileCount = 0;
 
     /**
+     * The number of tiles that are known to be required for this region.
+     */
+    uint64_t requiredTileCount = 0;
+
+    /**
      * The cumulative size, in bytes, of all tiles that have been fully downloaded.
      * This is a subset of `completedResourceSize`.
      */
@@ -193,8 +198,7 @@ public:
      * tiles stored for offline regions has been reached.
      *
      * Once the limit has been reached, the SDK will not download further offline
-     * tiles from Mapbox APIs until existing tiles have been removed. Contact your
-     * Mapbox sales representative to raise the limit.
+     * tiles from Mapbox APIs until existing tiles have been removed.
      *
      * This limit does not apply to non-Mapbox tile sources.
      *

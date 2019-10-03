@@ -2,8 +2,8 @@
 #include <mbgl/renderer/buckets/raster_bucket.hpp>
 #include <mbgl/renderer/render_tile.hpp>
 #include <mbgl/renderer/paint_parameters.hpp>
-#include <mbgl/renderer/sources/render_image_source.hpp>
 #include <mbgl/renderer/render_static_data.hpp>
+#include <mbgl/renderer/sources/render_image_source.hpp>
 #include <mbgl/programs/programs.hpp>
 #include <mbgl/programs/raster_program.hpp>
 #include <mbgl/tile/tile.hpp>
@@ -14,9 +14,14 @@ namespace mbgl {
 
 using namespace style;
 
+namespace {
+
 inline const RasterLayer::Impl& impl(const Immutable<style::Layer::Impl>& impl) {
+    assert(impl->getTypeInfo() == RasterLayer::Impl::staticTypeInfo());
     return static_cast<const RasterLayer::Impl&>(*impl);
 }
+
+} // namespace
 
 RenderRasterLayer::RenderRasterLayer(Immutable<style::RasterLayer::Impl> _impl)
     : RenderLayer(makeMutable<RasterLayerProperties>(std::move(_impl))),
@@ -34,6 +39,7 @@ void RenderRasterLayer::evaluate(const PropertyEvaluationParameters& parameters)
         staticImmutableCast<RasterLayer::Impl>(baseImpl),
         unevaluated.evaluate(parameters));
     passes = properties->evaluated.get<style::RasterOpacity>() > 0 ? RenderPass::Translucent : RenderPass::None;
+    properties->renderPasses = mbgl::underlying_type(passes);
     evaluatedProperties = std::move(properties);
 }
 
@@ -73,9 +79,17 @@ static std::array<float, 3> spinWeights(float spin) {
     return spin_weights;
 }
 
-void RenderRasterLayer::render(PaintParameters& parameters, RenderSource* source) {
-    if (parameters.pass != RenderPass::Translucent)
+void RenderRasterLayer::prepare(const LayerPrepareParameters& params) {
+    renderTiles = params.source->getRenderTiles();
+    imageData = params.source->getImageRenderData();
+    // It is possible image data is not available until the source loads it.
+    assert(renderTiles || imageData || !params.source->isEnabled());
+}
+
+void RenderRasterLayer::render(PaintParameters& parameters) {
+    if (parameters.pass != RenderPass::Translucent || (!renderTiles && !imageData)) {
         return;
+    }
     const auto& evaluated = static_cast<const RasterLayerProperties&>(*evaluatedProperties).evaluated;
     RasterProgram::Binders paintAttributeData{ evaluated, 0 };
 
@@ -83,7 +97,8 @@ void RenderRasterLayer::render(PaintParameters& parameters, RenderSource* source
                      const auto& vertexBuffer,
                      const auto& indexBuffer,
                      const auto& segments,
-                     const auto& textureBindings) {
+                     const auto& textureBindings,
+                     const std::string& drawScopeID) {
         auto& programInstance = parameters.programs.getRasterLayerPrograms().raster;
 
         const auto allUniformValues = programInstance.computeAllUniformValues(
@@ -125,35 +140,35 @@ void RenderRasterLayer::render(PaintParameters& parameters, RenderSource* source
             allUniformValues,
             allAttributeBindings,
             textureBindings,
-            getID()
+            getID() + "/" + drawScopeID
         );
     };
 
     const gfx::TextureFilterType filter = evaluated.get<RasterResampling>() == RasterResamplingType::Nearest ? gfx::TextureFilterType::Nearest : gfx::TextureFilterType::Linear;
 
-    if (auto* imageSource = source->as<RenderImageSource>()) {
-        if (imageSource->isEnabled() && imageSource->isLoaded() && !imageSource->bucket->needsUpload()) {
-            RasterBucket& bucket = *imageSource->bucket;
-            assert(bucket.texture);
+    if (imageData && !imageData->bucket->needsUpload()) {
+        RasterBucket& bucket = *imageData->bucket;
+        assert(bucket.texture);
 
-            for (auto matrix_ : imageSource->matrices) {
-                draw(matrix_,
-                     *bucket.vertexBuffer,
-                     *bucket.indexBuffer,
-                     bucket.segments,
-                     RasterProgram::TextureBindings{
-                         textures::image0::Value{ bucket.texture->getResource(), filter },
-                         textures::image1::Value{ bucket.texture->getResource(), filter },
-                     });
-            }
+        size_t i = 0;
+        for (const auto& matrix_ : imageData->matrices) {
+            draw(matrix_,
+                *bucket.vertexBuffer,
+                *bucket.indexBuffer,
+                bucket.segments,
+                RasterProgram::TextureBindings{
+                    textures::image0::Value{ bucket.texture->getResource(), filter },
+                    textures::image1::Value{ bucket.texture->getResource(), filter },
+                },
+                bucket.drawScopeID + std::to_string(i++));
         }
-    } else {
-        for (const RenderTile& tile : renderTiles) {
-            auto bucket_ = tile.tile.getBucket<RasterBucket>(*baseImpl);
+    } else if (renderTiles) {
+        for (const RenderTile& tile : *renderTiles) {
+            auto* bucket_ = tile.getBucket(*baseImpl);
             if (!bucket_) {
                 continue;
             }
-            RasterBucket& bucket = *bucket_;
+            auto& bucket = static_cast<RasterBucket&>(*bucket_);
 
             if (!bucket.hasData())
                 continue;
@@ -168,17 +183,19 @@ void RenderRasterLayer::render(PaintParameters& parameters, RenderSource* source
                      RasterProgram::TextureBindings{
                          textures::image0::Value{ bucket.texture->getResource(), filter },
                          textures::image1::Value{ bucket.texture->getResource(), filter },
-                     });
+                     },
+                     bucket.drawScopeID);
             } else {
                 // Draw the full tile.
                 draw(parameters.matrixForTile(tile.id, true),
-                     parameters.staticData.rasterVertexBuffer,
-                     parameters.staticData.quadTriangleIndexBuffer,
+                     *parameters.staticData.rasterVertexBuffer,
+                     *parameters.staticData.quadTriangleIndexBuffer,
                      parameters.staticData.rasterSegments,
                      RasterProgram::TextureBindings{
                          textures::image0::Value{ bucket.texture->getResource(), filter },
                          textures::image1::Value{ bucket.texture->getResource(), filter },
-                     });
+                     },
+                     bucket.drawScopeID);
             }
         }
     }

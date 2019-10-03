@@ -22,13 +22,20 @@ public interface TelemetryDefinition {
    * @param latitude  the latitude value of the gesture focal point
    * @param longitude the longitude value of the gesture focal point
    * @param zoom      current zoom of the map
+   * @deprecated since 7.5.0, this event is no longer supported
    */
+  @Deprecated
   void onGestureInteraction(String eventType, double latitude, double longitude, double zoom);
 
   /**
    * Set the end-user selected state to participate or opt-out in telemetry collection.
    */
   void setUserTelemetryRequestState(boolean enabled);
+
+  /**
+   * Disables a started telemetry service for this session only.
+   */
+  void disableTelemetrySession();
 
   /**
    * Set the end-user selected state to participate or opt-out in telemetry collection.

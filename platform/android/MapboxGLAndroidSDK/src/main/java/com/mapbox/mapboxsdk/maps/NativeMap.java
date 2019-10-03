@@ -41,12 +41,12 @@ interface NativeMap {
   // Camera API
   //
 
-  void jumpTo(@NonNull LatLng center, double zoom, double pitch, double bearing);
+  void jumpTo(@NonNull LatLng center, double zoom, double pitch, double bearing, double[] padding);
 
-  void easeTo(@NonNull LatLng center, double zoom, double bearing, double pitch, long duration,
+  void easeTo(@NonNull LatLng center, double zoom, double bearing, double pitch, double[] padding, long duration,
               boolean easingInterpolator);
 
-  void flyTo(@NonNull LatLng center, double zoom, double bearing, double pitch, long duration);
+  void flyTo(@NonNull LatLng center, double zoom, double bearing, double pitch, double[] padding, long duration);
 
   void moveBy(double deltaX, double deltaY, long duration);
 
@@ -63,7 +63,7 @@ interface NativeMap {
 
   LatLng getLatLng();
 
-  void setLatLngBounds(@NonNull LatLngBounds latLngBounds);
+  void setLatLngBounds(@Nullable LatLngBounds latLngBounds);
 
   void setVisibleCoordinateBounds(@NonNull LatLng[] coordinates, @NonNull RectF padding,
                                   double direction, long duration);
@@ -102,10 +102,10 @@ interface NativeMap {
   // Style API
   //
 
-  void setStyleUrl(String url);
+  void setStyleUri(String url);
 
   @NonNull
-  String getStyleUrl();
+  String getStyleUri();
 
   void setStyleJson(String newStyleJson);
 
@@ -161,9 +161,9 @@ interface NativeMap {
   // Content padding API
   //
 
-  void setContentPadding(float[] padding);
+  void setContentPadding(double[] padding);
 
-  float[] getContentPadding();
+  double[] getContentPadding();
 
   //
   // Query API

@@ -1,6 +1,7 @@
 package com.mapbox.mapboxsdk.testapp.activity.fragment
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Bundle
 import android.support.v4.app.Fragment
 import android.support.v4.app.FragmentManager
@@ -16,7 +17,6 @@ import android.widget.TextView
 import com.mapbox.mapboxsdk.camera.CameraPosition
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.maps.MapboxMapOptions
-import com.mapbox.mapboxsdk.maps.OnMapReadyCallback
 import com.mapbox.mapboxsdk.maps.Style
 import com.mapbox.mapboxsdk.maps.SupportMapFragment
 import com.mapbox.mapboxsdk.testapp.R
@@ -36,10 +36,10 @@ class NestedViewPagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_recyclerview)
         recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = ItemAdapter(LayoutInflater.from(this), supportFragmentManager)
+        recyclerView.adapter = ItemAdapter(this, LayoutInflater.from(this), supportFragmentManager)
     }
 
-    class ItemAdapter(private val inflater: LayoutInflater, private val fragmentManager: FragmentManager) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    class ItemAdapter(private val context: Context, private val inflater: LayoutInflater, private val fragmentManager: FragmentManager) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         private val items = listOf(
                 "one", "two", "three", ViewPagerItem(), "four", "five", "six", "seven", "eight", "nine", "ten",
@@ -57,7 +57,7 @@ class NestedViewPagerActivity : AppCompatActivity() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return if (viewType == TYPE_VIEWPAGER) {
                 val viewPager = inflater.inflate(R.layout.item_viewpager, parent, false) as ViewPager
-                mapHolder = ViewPagerHolder(viewPager, fragmentManager)
+                mapHolder = ViewPagerHolder(context, viewPager, fragmentManager)
                 return mapHolder as ViewPagerHolder
             } else {
                 TextHolder(inflater.inflate(android.R.layout.simple_list_item_1, parent, false) as TextView)
@@ -90,9 +90,9 @@ class NestedViewPagerActivity : AppCompatActivity() {
         }
 
         class ViewPagerItem
-        class ViewPagerHolder(private val viewPager: ViewPager, fragmentManager: FragmentManager) : RecyclerView.ViewHolder(viewPager) {
+        class ViewPagerHolder(context: Context, private val viewPager: ViewPager, fragmentManager: FragmentManager) : RecyclerView.ViewHolder(viewPager) {
             init {
-                viewPager.adapter = MapPagerAdapter(fragmentManager)
+                viewPager.adapter = MapPagerAdapter(context, fragmentManager)
                 viewPager.setOnTouchListener { view, motionEvent ->
                     // Disallow the touch request for recyclerView scroll
                     view.parent.requestDisallowInterceptTouchEvent(true)
@@ -102,10 +102,10 @@ class NestedViewPagerActivity : AppCompatActivity() {
             }
         }
 
-        class MapPagerAdapter(fm: FragmentManager?) : FragmentStatePagerAdapter(fm) {
+        class MapPagerAdapter(private val context: Context, fm: FragmentManager?) : FragmentStatePagerAdapter(fm) {
 
             override fun getItem(position: Int): Fragment {
-                val options = MapboxMapOptions()
+                val options = MapboxMapOptions.createFromAttributes(context)
                 options.textureMode(true)
                 options.doubleTapGesturesEnabled(false)
                 options.rotateGesturesEnabled(false)
@@ -126,7 +126,8 @@ class NestedViewPagerActivity : AppCompatActivity() {
                         options.camera(CameraPosition.Builder().target(LatLng(62.326440, 92.764913)).zoom(3.0).build())
                         val fragment = SupportMapFragment.newInstance(options)
                         fragment.getMapAsync { mapboxMap -> mapboxMap.setStyle(Style.DARK) }
-                        return fragment                    }
+                        return fragment
+                    }
                     3 -> {
                         return EmptyFragment.newInstance()
                     }
@@ -134,7 +135,8 @@ class NestedViewPagerActivity : AppCompatActivity() {
                         options.camera(CameraPosition.Builder().target(LatLng(-25.007786, 133.623852)).zoom(3.0).build())
                         val fragment = SupportMapFragment.newInstance(options)
                         fragment.getMapAsync { mapboxMap -> mapboxMap.setStyle(Style.SATELLITE) }
-                        return fragment                    }
+                        return fragment
+                    }
                     5 -> {
                         return EmptyFragment.newInstance()
                     }

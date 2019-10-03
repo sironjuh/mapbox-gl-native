@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mbgl/tile/tile_id.hpp>
+#include <mbgl/util/bitmask_operations.hpp>
 #include <mbgl/util/geometry.hpp>
 #include <mbgl/util/constants.hpp>
 #include <mbgl/util/optional.hpp>
@@ -15,7 +16,7 @@
 namespace mbgl {
 
 class SymbolInstance;
-class RenderLayerSymbolInterface;
+class RenderLayer;
 class SymbolBucket;
 
 class IndexedSymbolInstance {
@@ -58,14 +59,19 @@ class CrossTileSymbolIndex {
 public:
     CrossTileSymbolIndex();
 
-    bool addLayer(const RenderLayerSymbolInterface&, float lng);
+    enum class AddLayerResult : uint8_t {
+        NoChanges = 0,
+        BucketsAdded = 1 << 0,
+        BucketsRemoved = 1 << 1
+    };
+
+    AddLayerResult addLayer(const RenderLayer& layer, float lng);
     void pruneUnusedLayers(const std::set<std::string>&);
 
     void reset();
 private:
     std::map<std::string, CrossTileSymbolLayerIndex> layerIndexes;
     uint32_t maxCrossTileID = 0;
-    uint32_t maxBucketInstanceId = 0;
 };
 
 } // namespace mbgl

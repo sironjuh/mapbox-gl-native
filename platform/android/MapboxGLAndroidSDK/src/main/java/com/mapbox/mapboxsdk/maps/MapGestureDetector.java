@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.PointF;
 import android.os.Handler;
 import android.support.annotation.NonNull;
@@ -13,19 +14,14 @@ import android.view.MotionEvent;
 import android.view.animation.DecelerateInterpolator;
 
 import com.mapbox.android.gestures.AndroidGesturesManager;
-import com.mapbox.android.gestures.Constants;
 import com.mapbox.android.gestures.MoveGestureDetector;
 import com.mapbox.android.gestures.MultiFingerTapGestureDetector;
 import com.mapbox.android.gestures.RotateGestureDetector;
 import com.mapbox.android.gestures.ShoveGestureDetector;
 import com.mapbox.android.gestures.StandardGestureDetector;
 import com.mapbox.android.gestures.StandardScaleGestureDetector;
-import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.R;
-import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.constants.MapboxConstants;
-import com.mapbox.mapboxsdk.constants.TelemetryConstants;
-import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.utils.MathUtils;
 
 import java.util.ArrayList;
@@ -34,8 +30,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import static com.mapbox.mapboxsdk.maps.MapboxMap.OnCameraMoveStartedListener.REASON_API_ANIMATION;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.MAXIMUM_ANGULAR_VELOCITY;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.MAX_ABSOLUTE_SCALE_VELOCITY_CHANGE;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.QUICK_ZOOM_MAX_ZOOM_CHANGE;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.ROTATE_VELOCITY_RATIO_THRESHOLD;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.SCALE_VELOCITY_ANIMATION_DURATION_MULTIPLIER;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.SCALE_VELOCITY_RATIO_THRESHOLD;
+import static com.mapbox.mapboxsdk.constants.MapboxConstants.ZOOM_RATE;
 import static com.mapbox.mapboxsdk.maps.MapboxMap.OnCameraMoveStartedListener.REASON_API_GESTURE;
+import static com.mapbox.mapboxsdk.utils.MathUtils.normalize;
 
 /**
  * Manages gestures events on a MapView.
@@ -76,10 +79,10 @@ final class MapGestureDetector {
   @Nullable
   private PointF constantFocalPoint;
 
-  private AndroidGesturesManager gesturesManager;
+  @NonNull
+  private PointF doubleTapFocalPoint = new PointF();
 
-  // Manages when to ignore double-tap event because we've started the quick-zoom. See #14013.
-  private boolean executeDoubleTap;
+  private AndroidGesturesManager gesturesManager;
 
   private Animator scaleAnimator;
   private Animator rotateAnimator;
@@ -91,6 +94,8 @@ final class MapGestureDetector {
    */
   @NonNull
   private Handler animationsTimeoutHandler = new Handler();
+
+  private boolean doubleTapRegistered;
 
   MapGestureDetector(@Nullable Context context, Transform transform, Projection projection, UiSettings uiSettings,
                      AnnotationManager annotationManager, CameraChangeDispatcher cameraChangeDispatcher) {
@@ -113,12 +118,20 @@ final class MapGestureDetector {
 
   private void initializeGestureListeners(@NonNull Context context, boolean attachDefaultListeners) {
     if (attachDefaultListeners) {
-      StandardGestureListener standardGestureListener = new StandardGestureListener();
+      StandardGestureListener standardGestureListener = new StandardGestureListener(
+        context.getResources().getDimension(
+          com.mapbox.android.gestures.R.dimen.mapbox_defaultScaleSpanSinceStartThreshold));
       MoveGestureListener moveGestureListener = new MoveGestureListener();
       ScaleGestureListener scaleGestureListener = new ScaleGestureListener(
-        context.getResources().getDimension(R.dimen.mapbox_minimum_scale_velocity));
+        context.getResources().getDimension(R.dimen.mapbox_density_constant),
+        context.getResources().getDimension(R.dimen.mapbox_minimum_scale_speed),
+        context.getResources().getDimension(R.dimen.mapbox_minimum_angled_scale_speed),
+        context.getResources().getDimension(R.dimen.mapbox_minimum_scale_velocity)
+      );
       RotateGestureListener rotateGestureListener = new RotateGestureListener(
         context.getResources().getDimension(R.dimen.mapbox_minimum_scale_span_when_rotating),
+        context.getResources().getDimension(R.dimen.mapbox_density_constant),
+        context.getResources().getDimension(R.dimen.mapbox_angular_velocity_multiplier),
         context.getResources().getDimension(R.dimen.mapbox_minimum_angular_velocity),
         context.getResources().getDimension(
           com.mapbox.android.gestures.R.dimen.mapbox_defaultScaleSpanSinceStartThreshold));
@@ -153,6 +166,7 @@ final class MapGestureDetector {
     }
 
     gesturesManager = androidGesturesManager;
+    gesturesManager.getRotateGestureDetector().setAngleThreshold(3f);
   }
 
   /**
@@ -203,7 +217,12 @@ final class MapGestureDetector {
     boolean result = gesturesManager.onTouchEvent(motionEvent);
 
     switch (motionEvent.getActionMasked()) {
+      case MotionEvent.ACTION_POINTER_DOWN:
+        doubleTapFinished();
+        break;
+
       case MotionEvent.ACTION_UP:
+        doubleTapFinished();
         transform.setGestureInProgress(false);
 
         if (!scheduledAnimators.isEmpty()) {
@@ -219,6 +238,7 @@ final class MapGestureDetector {
       case MotionEvent.ACTION_CANCEL:
         scheduledAnimators.clear();
         transform.setGestureInProgress(false);
+        doubleTapFinished();
         break;
     }
 
@@ -253,7 +273,7 @@ final class MapGestureDetector {
   };
 
   /**
-   * Schedules a velocity animator to be executed when user lift fingers,
+   * Schedules a velocity animator to be executed when user lifts fingers,
    * unless canceled by the {@link #cancelAnimatorsRunnable}.
    *
    * @param animator animator ot be scheduled
@@ -307,6 +327,12 @@ final class MapGestureDetector {
   }
 
   private final class StandardGestureListener extends StandardGestureDetector.SimpleStandardOnGestureListener {
+    private final float doubleTapMovementThreshold;
+
+    StandardGestureListener(float doubleTapMovementThreshold) {
+      this.doubleTapMovementThreshold = doubleTapMovementThreshold;
+    }
+
     @Override
     public boolean onDown(MotionEvent motionEvent) {
       return true;
@@ -332,8 +358,6 @@ final class MapGestureDetector {
         notifyOnMapClickListeners(tapPoint);
       }
 
-      sendTelemetryEvent(TelemetryConstants.SINGLE_TAP, new PointF(motionEvent.getX(), motionEvent.getY()));
-
       return true;
     }
 
@@ -341,34 +365,30 @@ final class MapGestureDetector {
     public boolean onDoubleTapEvent(MotionEvent motionEvent) {
       int action = motionEvent.getActionMasked();
       if (action == MotionEvent.ACTION_DOWN) {
-        executeDoubleTap = true;
-
-        // disable the move detector in preparation for the quickzoom,
-        // so that we don't move the map's center slightly before the quickzoom is started (see #14227)
-        gesturesManager.getMoveGestureDetector().setEnabled(false);
+        doubleTapFocalPoint = new PointF(motionEvent.getX(), motionEvent.getY());
+        doubleTapStarted();
       }
 
       if (motionEvent.getActionMasked() == MotionEvent.ACTION_UP) {
-        // re-enabled the move detector
-        gesturesManager.getMoveGestureDetector().setEnabled(true);
-
-        if (!uiSettings.isZoomGesturesEnabled() || !uiSettings.isDoubleTapGesturesEnabled() || !executeDoubleTap) {
+        float diffX = Math.abs(motionEvent.getX() - doubleTapFocalPoint.x);
+        float diffY = Math.abs(motionEvent.getY() - doubleTapFocalPoint.y);
+        if (diffX > doubleTapMovementThreshold || diffY > doubleTapMovementThreshold) {
+          // Ignore double-tap event because we've started the quick-zoom. See #14013.
           return false;
         }
 
-        PointF zoomFocalPoint;
+        if (!uiSettings.isZoomGesturesEnabled() || !uiSettings.isDoubleTapGesturesEnabled()) {
+          return false;
+        }
+
         // Single finger double tap
         if (constantFocalPoint != null) {
           // User provided focal point
-          zoomFocalPoint = constantFocalPoint;
-        } else {
-          // Zoom in on gesture
-          zoomFocalPoint = new PointF(motionEvent.getX(), motionEvent.getY());
+          doubleTapFocalPoint = constantFocalPoint;
         }
 
-        zoomInAnimated(zoomFocalPoint, false);
+        zoomInAnimated(doubleTapFocalPoint, false);
 
-        sendTelemetryEvent(TelemetryConstants.DOUBLE_TAP, new PointF(motionEvent.getX(), motionEvent.getY()));
         return true;
       }
 
@@ -422,6 +442,21 @@ final class MapGestureDetector {
     }
   }
 
+  private void doubleTapStarted() {
+    // disable the move detector in preparation for the quickzoom,
+    // so that we don't move the map's center slightly before the quickzoom is started (see #14227)
+    gesturesManager.getMoveGestureDetector().setEnabled(false);
+    doubleTapRegistered = true;
+  }
+
+  private void doubleTapFinished() {
+    if (doubleTapRegistered) {
+      // re-enable the move detector in case of double tap
+      gesturesManager.getMoveGestureDetector().setEnabled(true);
+      doubleTapRegistered = false;
+    }
+  }
+
   private final class MoveGestureListener extends MoveGestureDetector.SimpleOnMoveGestureListener {
     @Override
     public boolean onMoveBegin(@NonNull MoveGestureDetector detector) {
@@ -430,7 +465,6 @@ final class MapGestureDetector {
       }
 
       cancelTransitionsIfRequired();
-      sendTelemetryEvent(TelemetryConstants.PAN, detector.getFocalPoint());
       notifyOnMoveBeginListeners(detector);
       return true;
     }
@@ -459,23 +493,26 @@ final class MapGestureDetector {
 
   private final class ScaleGestureListener extends StandardScaleGestureDetector.SimpleStandardOnScaleGestureListener {
 
+    private final float minimumGestureSpeed;
+    private final float minimumAngledGestureSpeed;
     private final float minimumVelocity;
+    private final double scaleVelocityRatioThreshold;
     private boolean quickZoom;
+    private float spanSinceLast;
+    private double screenHeight;
+    private double startZoom;
 
-    ScaleGestureListener(float minimumVelocity) {
+    ScaleGestureListener(double densityMultiplier, float minimumGestureSpeed, float minimumAngledGestureSpeed,
+                         float minimumVelocity) {
+      this.minimumGestureSpeed = minimumGestureSpeed;
+      this.minimumAngledGestureSpeed = minimumAngledGestureSpeed;
       this.minimumVelocity = minimumVelocity;
+      this.scaleVelocityRatioThreshold = SCALE_VELOCITY_RATIO_THRESHOLD * densityMultiplier;
     }
 
     @Override
     public boolean onScaleBegin(@NonNull StandardScaleGestureDetector detector) {
       quickZoom = detector.getPointersCount() == 1;
-      if (quickZoom) {
-        // Unfortunately, the double-tap event is returned by the framework when the second `ACTION_DOWN` event
-        // is registered in the right interval, regardless of the following `ACTION_MOVE` events.
-        // That's why, the quick-zoom gives us a handy reference when we've exceeded the movement threshold
-        // and we should ignore the double-tap.
-        executeDoubleTap = false;
-      }
 
       if (!uiSettings.isZoomGesturesEnabled()) {
         return false;
@@ -485,21 +522,46 @@ final class MapGestureDetector {
         if (!uiSettings.isQuickZoomGesturesEnabled()) {
           return false;
         }
+        // re-try disabling the move detector in case double tap has been interrupted before quickzoom started
+        gesturesManager.getMoveGestureDetector().setEnabled(false);
+      } else {
+        if (detector.getPreviousSpan() > 0) {
+          float currSpan = detector.getCurrentSpan();
+          float prevSpan = detector.getPreviousSpan();
+          double currTime = detector.getCurrentEvent().getEventTime();
+          double prevTime = detector.getPreviousEvent().getEventTime();
+          if (currTime == prevTime) {
+            return false;
+          }
+          double speed = Math.abs(currSpan - prevSpan) / (currTime - prevTime);
+          if (speed < minimumGestureSpeed) {
+            // do not scale if the minimal gesture speed is not met
+            return false;
+          } else if (!gesturesManager.getRotateGestureDetector().isInProgress()) {
+            float rotationDeltaSinceLast = gesturesManager.getRotateGestureDetector().getDeltaSinceLast();
+            if (Math.abs(rotationDeltaSinceLast) > 0.4 && speed < minimumAngledGestureSpeed) {
+              // do not scale in case we're preferring to start rotation
+              return false;
+            }
+
+            if (uiSettings.isDisableRotateWhenScaling()) {
+              // disable rotate gesture when scale is detected first
+              gesturesManager.getRotateGestureDetector().setEnabled(false);
+            }
+          }
+        } else {
+          return false;
+        }
       }
+
+      screenHeight = Resources.getSystem().getDisplayMetrics().heightPixels;
+      startZoom = transform.getRawZoom();
 
       cancelTransitionsIfRequired();
 
-      if (uiSettings.isIncreaseRotateThresholdWhenScaling()) {
-        // increase rotate angle threshold when scale is detected first
-        gesturesManager.getRotateGestureDetector().setAngleThreshold(
-          Constants.DEFAULT_ROTATE_ANGLE_THRESHOLD
-            + MapboxConstants.ROTATION_THRESHOLD_INCREASE_WHEN_SCALING
-        );
-      }
-
-      sendTelemetryEvent(TelemetryConstants.PINCH, getScaleFocalPoint(detector));
-
       notifyOnScaleBeginListeners(detector);
+
+      spanSinceLast = Math.abs(detector.getCurrentSpan() - detector.getPreviousSpan());
 
       return true;
     }
@@ -509,30 +571,49 @@ final class MapGestureDetector {
       // dispatching camera start event only when the movement actually occurred
       cameraChangeDispatcher.onCameraMoveStarted(CameraChangeDispatcher.REASON_API_GESTURE);
 
-      float scaleFactor = detector.getScaleFactor();
-      double zoomBy = getNewZoom(scaleFactor, quickZoom);
       PointF focalPoint = getScaleFocalPoint(detector);
-      transform.zoomBy(zoomBy, focalPoint);
+      if (quickZoom) {
+        double pixelDeltaChange = Math.abs(detector.getCurrentEvent().getY() - doubleTapFocalPoint.y);
+        boolean zoomedOut = detector.getCurrentEvent().getY() < doubleTapFocalPoint.y;
+
+        // normalize the pixel delta change, ranging from 0 to screen height, to a constant zoom change range
+        double normalizedDeltaChange = normalize(pixelDeltaChange, 0, screenHeight, 0, QUICK_ZOOM_MAX_ZOOM_CHANGE);
+
+        // calculate target zoom and adjust for a multiplier
+        double targetZoom = (zoomedOut ? startZoom - normalizedDeltaChange : startZoom + normalizedDeltaChange);
+        targetZoom *= uiSettings.getZoomRate();
+
+        transform.setZoom(targetZoom, focalPoint);
+      } else {
+        double zoomBy =
+          (Math.log(detector.getScaleFactor()) / Math.log(Math.PI / 2)) * ZOOM_RATE * uiSettings.getZoomRate();
+        transform.zoomBy(zoomBy, focalPoint);
+      }
 
       notifyOnScaleListeners(detector);
+
+      spanSinceLast = Math.abs(detector.getCurrentSpan() - detector.getPreviousSpan());
 
       return true;
     }
 
     @Override
     public void onScaleEnd(@NonNull StandardScaleGestureDetector detector, float velocityX, float velocityY) {
-      if (uiSettings.isIncreaseRotateThresholdWhenScaling()) {
-        // resetting default angle threshold
-        gesturesManager.getRotateGestureDetector().setAngleThreshold(
-          Constants.DEFAULT_ROTATE_ANGLE_THRESHOLD
-        );
+      if (quickZoom) {
+        // re-enabled the move detector if the quickzoom happened
+        gesturesManager.getMoveGestureDetector().setEnabled(true);
+      } else {
+        // re-enable rotation in case it's been disabled
+        gesturesManager.getRotateGestureDetector().setEnabled(true);
       }
 
       notifyOnScaleEndListeners(detector);
 
       float velocityXY = Math.abs(velocityX) + Math.abs(velocityY);
 
-      if (!uiSettings.isScaleVelocityAnimationEnabled() || velocityXY < minimumVelocity) {
+      if (!uiSettings.isScaleVelocityAnimationEnabled()
+        || velocityXY < minimumVelocity
+        || spanSinceLast / velocityXY < scaleVelocityRatioThreshold) {
         // notifying listeners that camera is idle only if there is no follow-up animation
         dispatchCameraIdle();
         return;
@@ -541,7 +622,9 @@ final class MapGestureDetector {
       double zoomAddition = calculateScale(velocityXY, detector.isScalingOut());
       double currentZoom = transform.getRawZoom();
       PointF focalPoint = getScaleFocalPoint(detector);
-      long animationTime = (long) (Math.abs(zoomAddition) * 1000 / 4);
+      // (log(x + 1 / e^2) + 2) * 150, x=0 to 2.5 (MapboxConstants#MAX_ABSOLUTE_SCALE_VELOCITY_CHANGE)
+      long animationTime = (long) ((Math.log((Math.abs(zoomAddition)) + 1 / Math.pow(Math.E, 2)) + 2)
+        * SCALE_VELOCITY_ANIMATION_DURATION_MULTIPLIER);
       scaleAnimator = createScaleAnimator(currentZoom, zoomAddition, focalPoint, animationTime);
       scheduleAnimator(scaleAnimator);
     }
@@ -561,36 +644,28 @@ final class MapGestureDetector {
     }
 
     private double calculateScale(double velocityXY, boolean isScalingOut) {
-      double zoomAddition = (float) Math.log(velocityXY / 1000 + 1);
+      double zoomAddition = velocityXY * MAX_ABSOLUTE_SCALE_VELOCITY_CHANGE * 1e-4;
+      zoomAddition = MathUtils.clamp(zoomAddition, 0, MAX_ABSOLUTE_SCALE_VELOCITY_CHANGE);
       if (isScalingOut) {
         zoomAddition = -zoomAddition;
       }
       return zoomAddition;
     }
-
-    private double getNewZoom(float scaleFactor, boolean quickZoom) {
-      double zoomBy = Math.log(scaleFactor) / Math.log(Math.PI / 2);
-      if (quickZoom) {
-        // clamp scale factors we feed to core #7514
-        boolean negative = zoomBy < 0;
-        zoomBy = MathUtils.clamp(Math.abs(zoomBy),
-          MapboxConstants.MINIMUM_SCALE_FACTOR_CLAMP,
-          MapboxConstants.MAXIMUM_SCALE_FACTOR_CLAMP);
-        return negative ? -zoomBy : zoomBy;
-      }
-      return zoomBy;
-    }
   }
 
   private final class RotateGestureListener extends RotateGestureDetector.SimpleOnRotateGestureListener {
     private final float minimumScaleSpanWhenRotating;
+    private final float angularVelocityMultiplier;
     private final float minimumAngularVelocity;
+    private final double rotateVelocityRatioThreshold;
     private final float defaultSpanSinceStartThreshold;
 
-    RotateGestureListener(float minimumScaleSpanWhenRotating, float minimumAngularVelocity,
-                          float defaultSpanSinceStartThreshold) {
+    RotateGestureListener(float minimumScaleSpanWhenRotating, double densityMultiplier, float angularVelocityMultiplier,
+                          float minimumAngularVelocity, float defaultSpanSinceStartThreshold) {
       this.minimumScaleSpanWhenRotating = minimumScaleSpanWhenRotating;
+      this.angularVelocityMultiplier = angularVelocityMultiplier;
       this.minimumAngularVelocity = minimumAngularVelocity;
+      this.rotateVelocityRatioThreshold = ROTATE_VELOCITY_RATIO_THRESHOLD * densityMultiplier;
       this.defaultSpanSinceStartThreshold = defaultSpanSinceStartThreshold;
     }
 
@@ -600,7 +675,23 @@ final class MapGestureDetector {
         return false;
       }
 
-      cancelTransitionsIfRequired();
+      float deltaSinceLast = Math.abs(detector.getDeltaSinceLast());
+      double currTime = detector.getCurrentEvent().getEventTime();
+      double prevTime = detector.getPreviousEvent().getEventTime();
+      if (currTime == prevTime) {
+        return false;
+      }
+      double speed = deltaSinceLast / (currTime - prevTime);
+      float deltaSinceStart = Math.abs(detector.getDeltaSinceStart());
+
+      // adjust the responsiveness of a rotation gesture - the higher the speed, the bigger the threshold
+      if (speed < 0.04
+        || (speed > 0.07 && deltaSinceStart < 5)
+        || (speed > 0.15 && deltaSinceStart < 7)
+        || (speed > 0.5 && deltaSinceStart < 15)
+      ) {
+        return false;
+      }
 
       if (uiSettings.isIncreaseScaleThresholdWhenRotating()) {
         // when rotation starts, interrupting scale and increasing the threshold
@@ -609,7 +700,7 @@ final class MapGestureDetector {
         gesturesManager.getStandardScaleGestureDetector().interrupt();
       }
 
-      sendTelemetryEvent(TelemetryConstants.ROTATION, getRotateFocalPoint(detector));
+      cancelTransitionsIfRequired();
 
       notifyOnRotateBeginListeners(detector);
 
@@ -644,22 +735,23 @@ final class MapGestureDetector {
 
       notifyOnRotateEndListeners(detector);
 
-      if (!uiSettings.isRotateVelocityAnimationEnabled() || Math.abs(angularVelocity) < minimumAngularVelocity) {
+      angularVelocity = angularVelocity * angularVelocityMultiplier;
+      angularVelocity = MathUtils.clamp(angularVelocity, -MAXIMUM_ANGULAR_VELOCITY, MAXIMUM_ANGULAR_VELOCITY);
+
+      float velocityXY = Math.abs(velocityX) + Math.abs(velocityY);
+      float delta = Math.abs(detector.getDeltaSinceLast());
+      double ratio = delta / velocityXY;
+
+      if (!uiSettings.isRotateVelocityAnimationEnabled()
+        || Math.abs(angularVelocity) < minimumAngularVelocity
+        || (gesturesManager.getStandardScaleGestureDetector().isInProgress() && ratio < rotateVelocityRatioThreshold)) {
         // notifying listeners that camera is idle only if there is no follow-up animation
         dispatchCameraIdle();
         return;
       }
 
-      boolean negative = angularVelocity < 0;
-      angularVelocity = (float) Math.pow(angularVelocity, 2);
-      angularVelocity = MathUtils.clamp(
-        angularVelocity, MapboxConstants.MINIMUM_ANGULAR_VELOCITY, MapboxConstants.MAXIMUM_ANGULAR_VELOCITY);
-
-      long animationTime = (long) (Math.log(angularVelocity + 1) * 500);
-
-      if (negative) {
-        angularVelocity = -angularVelocity;
-      }
+      long animationTime = (long) ((Math.log((Math.abs(angularVelocity)) + 1 / Math.pow(Math.E, 2)) + 2)
+        * SCALE_VELOCITY_ANIMATION_DURATION_MULTIPLIER);
 
       PointF focalPoint = getRotateFocalPoint(detector);
       rotateAnimator = createRotateAnimator(angularVelocity, animationTime, focalPoint);
@@ -698,7 +790,7 @@ final class MapGestureDetector {
         @Override
         public void onAnimationStart(Animator animation) {
           transform.cancelTransitions();
-          cameraChangeDispatcher.onCameraMoveStarted(REASON_API_ANIMATION);
+          cameraChangeDispatcher.onCameraMoveStarted(REASON_API_GESTURE);
         }
 
         @Override
@@ -724,8 +816,6 @@ final class MapGestureDetector {
       }
 
       cancelTransitionsIfRequired();
-
-      sendTelemetryEvent(TelemetryConstants.PITCH, detector.getFocalPoint());
 
       // disabling move gesture during shove
       gesturesManager.getMoveGestureDetector().setEnabled(false);
@@ -775,8 +865,6 @@ final class MapGestureDetector {
       transform.cancelTransitions();
       cameraChangeDispatcher.onCameraMoveStarted(REASON_API_GESTURE);
 
-      sendTelemetryEvent(TelemetryConstants.TWO_FINGER_TAP, detector.getFocalPoint());
-
       PointF zoomFocalPoint;
       // Single finger double tap
       if (constantFocalPoint != null) {
@@ -811,7 +899,7 @@ final class MapGestureDetector {
       @Override
       public void onAnimationStart(Animator animation) {
         transform.cancelTransitions();
-        cameraChangeDispatcher.onCameraMoveStarted(REASON_API_ANIMATION);
+        cameraChangeDispatcher.onCameraMoveStarted(REASON_API_GESTURE);
       }
 
       @Override
@@ -888,24 +976,6 @@ final class MapGestureDetector {
       && (!uiSettings.isZoomGesturesEnabled() || !gesturesManager.getStandardScaleGestureDetector().isInProgress())
       && (!uiSettings.isRotateGesturesEnabled() || !gesturesManager.getRotateGestureDetector().isInProgress())
       && (!uiSettings.isTiltGesturesEnabled() || !gesturesManager.getShoveGestureDetector().isInProgress());
-  }
-
-  private void sendTelemetryEvent(String eventType, @NonNull PointF focalPoint) {
-    TelemetryDefinition telemetry = Mapbox.getTelemetry();
-    if (telemetry != null) {
-      CameraPosition cameraPosition = transform.getCameraPosition();
-      if (cameraPosition != null) {
-        double zoom = cameraPosition.zoom;
-        if (isZoomValid(zoom)) {
-          LatLng latLng = projection.fromScreenLocation(focalPoint);
-          telemetry.onGestureInteraction(eventType, latLng.getLatitude(), latLng.getLongitude(), zoom);
-        }
-      }
-    }
-  }
-
-  private boolean isZoomValid(double mapZoom) {
-    return mapZoom >= MapboxConstants.MINIMUM_ZOOM && mapZoom <= MapboxConstants.MAXIMUM_ZOOM;
   }
 
   void notifyOnMapClickListeners(@NonNull PointF tapPoint) {

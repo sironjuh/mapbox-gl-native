@@ -1,4 +1,5 @@
 #include <mbgl/style/expression/dsl.hpp>
+#include <mbgl/style/expression/dsl_impl.hpp>
 #include <mbgl/style/expression/error.hpp>
 #include <mbgl/style/expression/literal.hpp>
 #include <mbgl/style/expression/assertion.hpp>
@@ -9,21 +10,39 @@
 #include <mbgl/style/expression/compound_expression.hpp>
 #include <mbgl/style/expression/format_expression.hpp>
 
+#include <mapbox/geojsonvt.hpp>
+#include <mbgl/style/conversion/json.hpp>
+#include <rapidjson/document.h>
+
 namespace mbgl {
 namespace style {
 namespace expression {
 namespace dsl {
 
-static std::unique_ptr<Expression> compound(const char* op, std::vector<std::unique_ptr<Expression>> args) {
+std::unique_ptr<Expression> compound(const char* op, std::vector<std::unique_ptr<Expression>> args) {
     ParsingContext ctx;
     ParseResult result =  createCompoundExpression(op, std::move(args), ctx);
     assert(result);
     return std::move(*result);
 }
+    
+std::unique_ptr<Expression> createExpression(const char* expr) {
+    using JSValue = rapidjson::GenericValue<rapidjson::UTF8<>, rapidjson::CrtAllocator>;
+    rapidjson::GenericDocument<rapidjson::UTF8<>, rapidjson::CrtAllocator> document;
+    document.Parse<0>(expr);
+    if (document.HasParseError()) return nullptr;
 
-template <class... Args>
-static std::unique_ptr<Expression> compound(const char* op, Args... args) {
-    return compound(op, vec(std::move(args)...));
+    const JSValue* expression = &document;
+    expression::ParsingContext ctx;
+    expression::ParseResult parsed =
+    ctx.parseExpression(mbgl::style::conversion::Convertible(expression));
+    return parsed ? std::move(*parsed) : nullptr;
+}
+
+std::unique_ptr<Expression> createExpression(const mbgl::style::conversion::Convertible& expr) {
+    expression::ParsingContext ctx;
+    expression::ParseResult parsed = ctx.parseExpression(expr);
+    return parsed ? std::move(*parsed) : nullptr;
 }
 
 std::unique_ptr<Expression> error(std::string message) {
@@ -54,32 +73,54 @@ std::unique_ptr<Expression> literal(std::initializer_list<const char *> value) {
     return literal(values);
 }
 
-std::unique_ptr<Expression> assertion(type::Type type, std::unique_ptr<Expression> value) {
-    return std::make_unique<Assertion>(type, vec(std::move(value)));
+std::unique_ptr<Expression> assertion(type::Type type,
+                                      std::unique_ptr<Expression> value,
+                                      std::unique_ptr<Expression> def) {
+    std::vector<std::unique_ptr<Expression>> v  = vec(std::move(value));
+    if (def) {
+        v.push_back(std::move(def));
+    }
+    return std::make_unique<Assertion>(type, std::move(v));
 }
 
-std::unique_ptr<Expression> number(std::unique_ptr<Expression> value) {
-    return assertion(type::Number, std::move(value));
+std::unique_ptr<Expression> number(std::unique_ptr<Expression> value,
+                                   std::unique_ptr<Expression> def) {
+    return assertion(type::Number, std::move(value), std::move(def));
 }
 
-std::unique_ptr<Expression> string(std::unique_ptr<Expression> value) {
-    return assertion(type::String, std::move(value));
+std::unique_ptr<Expression> string(std::unique_ptr<Expression> value,
+                                   std::unique_ptr<Expression> def) {
+    return assertion(type::String, std::move(value), std::move(def));
 }
 
-std::unique_ptr<Expression> boolean(std::unique_ptr<Expression> value) {
-    return assertion(type::Boolean, std::move(value));
+std::unique_ptr<Expression> boolean(std::unique_ptr<Expression> value,
+                                    std::unique_ptr<Expression> def) {
+    return assertion(type::Boolean, std::move(value), std::move(def));
 }
 
-std::unique_ptr<Expression> toColor(std::unique_ptr<Expression> value) {
-    return std::make_unique<Coercion>(type::Color, vec(std::move(value)));
+std::unique_ptr<Expression> coercion(type::Type type,
+                                     std::unique_ptr<Expression> value,
+                                     std::unique_ptr<Expression> def) {
+    std::vector<std::unique_ptr<Expression>> v = vec(std::move(value));
+    if (def) {
+        v.push_back(std::move(def));
+    }
+    return std::make_unique<Coercion>(type, std::move(v));
 }
 
-std::unique_ptr<Expression> toString(std::unique_ptr<Expression> value) {
-    return std::make_unique<Coercion>(type::String, vec(std::move(value)));
+std::unique_ptr<Expression> toColor(std::unique_ptr<Expression> value,
+                                    std::unique_ptr<Expression> def) {
+    return coercion(type::Color, std::move(value), std::move(def));
 }
 
-std::unique_ptr<Expression> toFormatted(std::unique_ptr<Expression> value) {
-    return std::make_unique<Coercion>(type::Formatted, vec(std::move(value)));
+std::unique_ptr<Expression> toString(std::unique_ptr<Expression> value,
+                                     std::unique_ptr<Expression> def) {
+    return coercion(type::String, std::move(value), std::move(def));
+}
+
+std::unique_ptr<Expression> toFormatted(std::unique_ptr<Expression> value,
+                                        std::unique_ptr<Expression> def) {
+    return coercion(type::Formatted, std::move(value), std::move(def));
 }
     
 std::unique_ptr<Expression> get(const char* value) {

@@ -16,7 +16,6 @@ import android.widget.Toast;
 import com.mapbox.android.core.location.LocationEngineRequest;
 import com.mapbox.android.core.permissions.PermissionsListener;
 import com.mapbox.android.core.permissions.PermissionsManager;
-import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.location.LocationComponent;
 import com.mapbox.mapboxsdk.location.LocationComponentActivationOptions;
 import com.mapbox.mapboxsdk.location.LocationComponentOptions;
@@ -183,6 +182,22 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
       locationComponent.setMaxAnimationFps(5);
     } else if (id == R.id.action_component_throttling_disabled) {
       locationComponent.setMaxAnimationFps(Integer.MAX_VALUE);
+    } else if (id == R.id.action_component_animate_while_tracking) {
+      locationComponent.zoomWhileTracking(17, 750, new MapboxMap.CancelableCallback() {
+        @Override
+        public void onCancel() {
+          // No impl
+        }
+
+        @Override
+        public void onFinish() {
+          locationComponent.tiltWhileTracking(60);
+        }
+      });
+      if (locationComponent.getCameraMode() == CameraMode.NONE) {
+
+        Toast.makeText(this, "Not possible to animate - not tracking", Toast.LENGTH_SHORT).show();
+      }
     }
 
     return super.onOptionsItemSelected(item);
@@ -218,8 +233,8 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
       return;
     }
 
-    String styleUrl = Style.DARK.equals(mapboxMap.getStyle().getUrl()) ? Style.LIGHT : Style.DARK;
-    mapboxMap.setStyle(new Style.Builder().fromUrl(styleUrl));
+    String styleUrl = Style.DARK.equals(mapboxMap.getStyle().getUri()) ? Style.LIGHT : Style.DARK;
+    mapboxMap.setStyle(new Style.Builder().fromUri(styleUrl));
   }
 
   private void disableGesturesManagement() {
@@ -341,6 +356,8 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
   private void showTrackingListDialog() {
     List<String> trackingTypes = new ArrayList<>();
     trackingTypes.add("None");
+    trackingTypes.add("None Compass");
+    trackingTypes.add("None GPS");
     trackingTypes.add("Tracking");
     trackingTypes.add("Tracking Compass");
     trackingTypes.add("Tracking GPS");
@@ -355,6 +372,10 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
       locationTrackingBtn.setText(selectedTrackingType);
       if (selectedTrackingType.contentEquals("None")) {
         setCameraTrackingMode(CameraMode.NONE);
+      } else if (selectedTrackingType.contentEquals("None Compass")) {
+        setCameraTrackingMode(CameraMode.NONE_COMPASS);
+      } else if (selectedTrackingType.contentEquals("None GPS")) {
+        setCameraTrackingMode(CameraMode.NONE_GPS);
       } else if (selectedTrackingType.contentEquals("Tracking")) {
         setCameraTrackingMode(CameraMode.TRACKING);
       } else if (selectedTrackingType.contentEquals("Tracking Compass")) {
@@ -370,31 +391,18 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
   }
 
   private void setCameraTrackingMode(@CameraMode.Mode int mode) {
-    locationComponent.setCameraMode(mode, new OnLocationCameraTransitionListener() {
-      @Override
-      public void onLocationCameraTransitionFinished(@CameraMode.Mode int cameraMode) {
-        if (mode != CameraMode.NONE) {
-          locationComponent.zoomWhileTracking(15, 750, new MapboxMap.CancelableCallback() {
-            @Override
-            public void onCancel() {
-              // No impl
-            }
-
-            @Override
-            public void onFinish() {
-              locationComponent.tiltWhileTracking(45);
-            }
-          });
-        } else {
-          mapboxMap.easeCamera(CameraUpdateFactory.tiltTo(0));
+    locationComponent.setCameraMode(mode, 1200, 16.0, null, 45.0,
+      new OnLocationCameraTransitionListener() {
+        @Override
+        public void onLocationCameraTransitionFinished(@CameraMode.Mode int cameraMode) {
+          Toast.makeText(LocationModesActivity.this, "Transition finished", Toast.LENGTH_SHORT).show();
         }
-      }
 
-      @Override
-      public void onLocationCameraTransitionCanceled(@CameraMode.Mode int cameraMode) {
-        // No impl
-      }
-    });
+        @Override
+        public void onLocationCameraTransitionCanceled(@CameraMode.Mode int cameraMode) {
+          Toast.makeText(LocationModesActivity.this, "Transition canceled", Toast.LENGTH_SHORT).show();
+        }
+      });
   }
 
   @Override
@@ -407,6 +415,10 @@ public class LocationModesActivity extends AppCompatActivity implements OnMapRea
     this.cameraMode = currentMode;
     if (currentMode == CameraMode.NONE) {
       locationTrackingBtn.setText("None");
+    } else if (currentMode == CameraMode.NONE_COMPASS) {
+      locationTrackingBtn.setText("None Compass");
+    } else if (currentMode == CameraMode.NONE_GPS) {
+      locationTrackingBtn.setText("None GPS");
     } else if (currentMode == CameraMode.TRACKING) {
       locationTrackingBtn.setText("Tracking");
     } else if (currentMode == CameraMode.TRACKING_COMPASS) {

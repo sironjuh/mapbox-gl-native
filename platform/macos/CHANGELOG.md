@@ -2,31 +2,66 @@
 
 ## master
 
+* Fixed crashes triggered when `MGLSource` and `MGLStyleLayer` objects are accessed after having been invalidated after a style change. ([#15539](https://github.com/mapbox/mapbox-gl-native/pull/15539))
+* Fixed an issue where it was possible to set the map’s content insets then tilt the map enough to see the horizon, causing performance issues. ([#15195](https://github.com/mapbox/mapbox-gl-native/pull/15195))
+* Added an `MGLMapView.prefetchesTiles` property to configure lower-resolution tile prefetching behavior. ([#14816](https://github.com/mapbox/mapbox-gl-native/pull/14816))
+* Fixed queryRenderedFeatues bug caused by incorrect sort feature index calculation. ([#14884](https://github.com/mapbox/mapbox-gl-native/pull/14884))
+* Ideographic glyphs from Chinese, Japanese, and Korean are no longer downloaded by default as part of offline packs; they are instead rendered on-device, saving bandwidth and storage while improving performance. ([#14176](https://github.com/mapbox/mapbox-gl-native/pull/14176))
+* The `MGLIdeographicFontFamilyName` Info.plist key now also accepts an array of font family names, to customize font fallback behavior. It can also be set to a Boolean value of `NO` to force the SDK to typeset CJK characters in a remote font specified by `MGLSymbolStyleLayer.textFontNames`. ([#14862](https://github.com/mapbox/mapbox-gl-native/pull/14862)) 
+* Performance improvements for queryRenderedFeatures API and optimization that allocates containers based on a number of rendered layers. ([#14930](https://github.com/mapbox/mapbox-gl-native/pull/14930))
+* Fixed rendering layers after fill-extrusion regression caused by optimization of fill-extrusion rendering. ([#15065](https://github.com/mapbox/mapbox-gl-native/pull/15065))
+* `MGLLoggingLevel` has been updated for better matching core log levels. Now can use `[MGLLoggingConfiguration sharedConfiguration].loggingLevel` to filter logs from core . ([#15120](https://github.com/mapbox/mapbox-gl-native/pull/15120))
+* Fixed an issue where animated camera transitions zoomed in or out too dramatically. ([#15281](https://github.com/mapbox/mapbox-gl-native/pull/15281))
+* Fixed rendering and collision detection issues with using `text-variable-anchor` and `icon-text-fit` properties on the same layer. ([#15367](https://github.com/mapbox/mapbox-gl-native/pull/15367))
+* Fixed symbol overlap when zooming out quickly. ([15416](https://github.com/mapbox/mapbox-gl-native/pull/15416))
+* Fixed a rendering issue that non-SDF icon would be treated as SDF icon if they are in the same layer. ([#15456](https://github.com/mapbox/mapbox-gl-native/pull/15456))
+* Fixed a rendering issue of `collisionBox` when `text-translate` or `icon-translate` is enabled. ([#15467](https://github.com/mapbox/mapbox-gl-native/pull/15467))
+* Fixed an issue of integer overflow when converting `tileCoordinates` to `LatLon`, which caused issues such as `queryRenderedFeatures` and `querySourceFeatures` returning incorrect coordinates at zoom levels 20 and higher. ([#15560](https://github.com/mapbox/mapbox-gl-native/pull/15560))
+* Added an `-[MGLMapSnapshotter startWithOverlayHandler:completionHandler:]` method to provide the snapshot's current `CGContext` in order to perform custom drawing on `MGLMapSnapShot` objects. ([#15530](https://github.com/mapbox/mapbox-gl-native/pull/15530))
+* Fixed an issue that `maxzoom` in style `Sources` option was ignored when URL resource is provided. It may cause problems such as extra tiles downloading at higher zoom level than `maxzoom`, or problems that wrong setting of `overscaledZ` in `OverscaledTileID` that will be passed to `SymbolLayout`, leading wrong rendering appearance. ([#15581](https://github.com/mapbox/mapbox-gl-native/pull/15581))
+* Fixed a crash when `-[MGLOfflinePack invalidate]` is called on different threads. ([#15582](https://github.com/mapbox/mapbox-gl-native/pull/15582))
+
 ### Styles and rendering
 
+* Setting `MGLMapView.contentInset` now moves the map’s focal point to the center of the content frame after insetting. ([#14664](https://github.com/mapbox/mapbox-gl-native/pull/14664))
+* Added the `-[MGLMapViewDelegate mapView:shouldRemoveStyleImage:]` method for optimizing style image caching. ([#14769](https://github.com/mapbox/mapbox-gl-native/pull/14769))
+* Introduce `text-writing-mode` layout property for symbol layer ([#14932](https://github.com/mapbox/mapbox-gl-native/pull/14932)). The `text-writing-mode` layout property allows control over symbol's preferred writing mode. The new property value is an array, whose values are enumeration values from a ( `horizontal` | `vertical` ) set.
+
+### Other changes
+
+* The `-[MGLMapView setCamera:withDuration:animationTimingFunction:edgePadding:completionHandler:]` method now adds the current value of the `MGLMapView.contentInsets` property to the `edgePadding` parameter. ([#14813](https://github.com/mapbox/mapbox-gl-native/pull/14813))
+* Updated "map ID" to the more accurate term "tileset ID" in documentation; updated "style's Map ID" to the more accurate term "style URL". ([#15116](https://github.com/mapbox/mapbox-gl-native/pull/15116))
+
+### Other changes
+
+* Added variants of multiple animated `MGLMapView` methods that accept completion handlers ([#14381](https://github.com/mapbox/mapbox-gl-native/pull/14381)):
+  * `-[MGLMapView setVisibleCoordinateBounds:edgePadding:animated:completionHandler:]`
+  * `-[MGLMapView setContentInsets:animated:completionHandler:]`
+  * `-[MGLMapView showAnnotations:edgePadding:animated:completionHandler:]`
+
+## 0.14.0 - May 22, 2018
+
+### Styles and rendering
+
+* Client-side text rendering of CJK ideographs is now enabled by default. ([#13988](https://github.com/mapbox/mapbox-gl-native/pull/13988))
 * Added an `MGLStyle.performsPlacementTransitions` property to control how long it takes for colliding labels to fade out. ([#13565](https://github.com/mapbox/mapbox-gl-native/pull/13565))
-* Fixed a crash when casting large numbers in `NSExpression`. ([#13580](https://github.com/mapbox/mapbox-gl-native/pull/13580))
 * Added the `-[MGLShapeSource leavesOfCluster:offset:limit:]`, `-[MGLShapeSource childrenOfCluster:]`, `-[MGLShapeSource zoomLevelForExpandingCluster:]` methods for inspecting a cluster in an `MGLShapeSource`s created with the `MGLShapeSourceOptionClustered` option. Feature querying now returns clusters represented by `MGLPointFeatureCluster` objects (that conform to the `MGLCluster` protocol). ([#12952](https://github.com/mapbox/mapbox-gl-native/pull/12952)
-* Added `MGLNetworkConfiguration` class to customize the SDK's `NSURLSessionConfiguration` object. ([#11447](https://github.com/mapbox/mapbox-gl-native/pull/13886))
+* Fixed a crash when casting large numbers in `NSExpression`. ([#13580](https://github.com/mapbox/mapbox-gl-native/pull/13580))
 * Fixed an issue that caused `MGL_FUNCTION` to ignore multiple formatting parameters when passed a `format` function as parameter. ([#14064](https://github.com/mapbox/mapbox-gl-native/pull/14064))
-* Added `mgl_attributed:` expression operator, which concatenate `MGLAttributedExpression` objects for specifying rich text in the `MGLSymbolStyleLayer.text` property. ([#14094](https://github.com/mapbox/mapbox-gl-native/pull/14094))
+* Added `mgl_attributed:` expression operator, which concatenates `MGLAttributedExpression` objects for specifying rich text in the `MGLSymbolStyleLayer.text` property. ([#14094](https://github.com/mapbox/mapbox-gl-native/pull/14094))
 * Fixed an issue that caused conditional expressions to crash when passed nested conditional expressions as parameters. ([#14181](https://github.com/mapbox/mapbox-gl-native/pull/14181))
-* Added `-[MGLMapViewDelegate mapView:didFailToLoadImage:]` to load missing symbol icons in the style if they are not found. ([#14302](https://github.com/mapbox/mapbox-gl-native/pull/14302))
+* Fixed a possible crash with certain expressions containing arguments that evaluate to a dictionary containing `NSArray` or `NSNumber` values. ([#14352](https://github.com/mapbox/mapbox-gl-native/pull/14352))
 * Fixed a bug where non-opaque `NSColor` values were ignored when assigned to a style layer color property. ([#14406](https://github.com/mapbox/mapbox-gl-native/pull/14406))
+* Fixed a bug where some layers weren’t rendering correctly after panning. ([#14527](https://github.com/mapbox/mapbox-gl-native/pull/14527))
+* Changed placement order of `MGLSymbolStyleLayer` to match the viewport-y order when `MGLSymbolStyleLayer.symbolZOrder` is set to `MGLSymbolZOrderViewportY`, allowing icons to overlap but not text. ([#14486](https://github.com/mapbox/mapbox-gl-native/pull/14486))
 
-### Offline
-
-* Fixed a bug that caused offline packs created prior to v0.7.0 (introduced in [#11055](https://github.com/mapbox/mapbox-gl-native/pull/11055)) to be marked as `MGLOfflinePackStateInactive`. ([#14188](https://github.com/mapbox/mapbox-gl-native/pull/14188))
-
-### Annotations
-
-* Fixed a bug with `MGLMapView.visibleAnnotations` that resulted in incorrect results and performance degradation. ([#13745](https://github.com/mapbox/mapbox-gl-native/pull/13745))
-* Fixed a bug where selecting partially on-screen annotations (without a callout) would move the map. ([#13727](https://github.com/mapbox/mapbox-gl-native/pull/13727))
-
-### Packaging
+### Other changes
 
 * Added Czech and Galician localizations. ([#13782](https://github.com/mapbox/mapbox-gl-native/pull/13782), [#14095](https://github.com/mapbox/mapbox-gl-native/pull/14095))
-* Added support for building with Xcode 10.2 / iOS SDK 12.2. ([#14241](https://github.com/mapbox/mapbox-gl-native/pull/14241))
+* Added `MGLNetworkConfiguration` class to customize the SDK’s `NSURLSessionConfiguration` object. ([#13886](https://github.com/mapbox/mapbox-gl-native/pull/13886))
+* Fixed a bug with `MGLMapView.visibleAnnotations` that resulted in incorrect results and performance degradation. ([#13745](https://github.com/mapbox/mapbox-gl-native/pull/13745))
+* Fixed a bug where selecting partially on-screen annotations (without a callout) would move the map. ([#13727](https://github.com/mapbox/mapbox-gl-native/pull/13727))
+* Fixed a bug that caused offline packs created prior to v0.7.0 (introduced in [#11055](https://github.com/mapbox/mapbox-gl-native/pull/11055)) to be marked as `MGLOfflinePackStateInactive`. ([#14188](https://github.com/mapbox/mapbox-gl-native/pull/14188))
 
 ## 0.13.0 - December 20, 2018
 

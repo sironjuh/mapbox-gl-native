@@ -38,12 +38,17 @@ import java.util.Random;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.FormatOption.formatFontScale;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.FormatOption.formatTextColor;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.FormatOption.formatTextFont;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.NumberFormatOption.currency;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.NumberFormatOption.locale;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.concat;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.format;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.formatEntry;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.get;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.literal;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.match;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.numberFormat;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.rgb;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.stop;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.switchCase;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.toBool;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAllowOverlap;
@@ -51,6 +56,7 @@ import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconAnchor;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconColor;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconIgnorePlacement;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconImage;
+import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconOpacity;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.iconSize;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.textAllowOverlap;
 import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.textAnchor;
@@ -69,8 +75,6 @@ import static com.mapbox.mapboxsdk.style.layers.PropertyFactory.textSize;
  */
 public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.OnMapClickListener, OnMapReadyCallback {
 
-  private static final String MARKER_SOURCE = "marker-source";
-  private static final String MARKER_LAYER = "marker-layer";
   private static final String ID_FEATURE_PROPERTY = "id";
   private static final String SELECTED_FEATURE_PROPERTY = "selected";
   private static final String TITLE_FEATURE_PROPERTY = "title";
@@ -78,8 +82,13 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
   private static final String[] NORMAL_FONT_STACK = new String[] {"DIN Offc Pro Regular", "Arial Unicode MS Regular"};
   private static final String[] BOLD_FONT_STACK = new String[] {"DIN Offc Pro Bold", "Arial Unicode MS Regular"};
 
+  // layer & source constants
+  private static final String MARKER_SOURCE = "marker-source";
+  private static final String MARKER_LAYER = "marker-layer";
   private static final String MAPBOX_SIGN_SOURCE = "mapbox-sign-source";
   private static final String MAPBOX_SIGN_LAYER = "mapbox-sign-layer";
+  private static final String NUMBER_FORMAT_SOURCE = "mapbox-number-source";
+  private static final String NUMBER_FORMAT_LAYER = "mapbox-number-layer";
 
   private static final Expression TEXT_FIELD_EXPRESSION =
     switchCase(toBool(get(SELECTED_FEATURE_PROPERTY)),
@@ -105,6 +114,7 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
   private FeatureCollection markerCollection;
   private SymbolLayer markerSymbolLayer;
   private SymbolLayer mapboxSignSymbolLayer;
+  private SymbolLayer numberFormatSymbolLayer;
   private MapboxMap mapboxMap;
   private MapView mapView;
 
@@ -114,7 +124,7 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
     setContentView(R.layout.activity_symbollayer);
 
     // Create map configuration
-    MapboxMapOptions mapboxMapOptions = new MapboxMapOptions();
+    MapboxMapOptions mapboxMapOptions = MapboxMapOptions.createFromAttributes(this);
     mapboxMapOptions.camera(new CameraPosition.Builder().target(
       new LatLng(52.35273, 4.91638))
       .zoom(13)
@@ -174,11 +184,20 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
     mapboxSignSymbolLayer = new SymbolLayer(MAPBOX_SIGN_LAYER, MAPBOX_SIGN_SOURCE);
     shuffleMapboxSign();
 
+    // number format layer
+    Source numberFormatSource = new GeoJsonSource(NUMBER_FORMAT_SOURCE, Point.fromLngLat(4.92756, 52.3516));
+    numberFormatSymbolLayer = new SymbolLayer(NUMBER_FORMAT_LAYER, NUMBER_FORMAT_SOURCE);
+    numberFormatSymbolLayer.setProperties(
+      textField(
+        numberFormat(123.456789, locale("nl-NL"), currency("EUR"))
+      )
+    );
+
     mapboxMap.setStyle(new Style.Builder()
-      .fromUrl("asset://streets.json")
+      .fromUri("asset://streets.json")
       .withImage("Car", Objects.requireNonNull(carBitmap), false)
-      .withSources(markerSource, mapboxSignSource)
-      .withLayers(markerSymbolLayer, mapboxSignSymbolLayer)
+      .withSources(markerSource, mapboxSignSource, numberFormatSource)
+      .withLayers(markerSymbolLayer, mapboxSignSymbolLayer, numberFormatSymbolLayer)
     );
 
     // Set a click-listener so we can manipulate the map
@@ -198,6 +217,12 @@ public class SymbolLayerActivity extends AppCompatActivity implements MapboxMap.
           // use DDS
           boolean selected = feature.getBooleanProperty(SELECTED_FEATURE_PROPERTY);
           feature.addBooleanProperty(SELECTED_FEATURE_PROPERTY, !selected);
+
+          // validate symbol flicker regression for #13407
+          markerSymbolLayer.setProperties(iconOpacity(match(
+            get(ID_FEATURE_PROPERTY), literal(1.0f),
+            stop(feature.getStringProperty("id"), selected ? 0.3f : 1.0f)
+          )));
         }
       }
       markerSource.setGeoJson(markerCollection);

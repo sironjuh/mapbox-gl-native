@@ -18,17 +18,20 @@ import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
 import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.R;
 import com.mapbox.mapboxsdk.attribution.AttributionLayout;
 import com.mapbox.mapboxsdk.attribution.AttributionMeasure;
 import com.mapbox.mapboxsdk.attribution.AttributionParser;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
+import com.mapbox.mapboxsdk.constants.MapboxConstants;
 import com.mapbox.mapboxsdk.geometry.LatLngBounds;
 import com.mapbox.mapboxsdk.log.Logger;
 import com.mapbox.mapboxsdk.maps.Style;
 import com.mapbox.mapboxsdk.maps.TelemetryDefinition;
 import com.mapbox.mapboxsdk.storage.FileSource;
+import com.mapbox.mapboxsdk.utils.FontUtils;
 import com.mapbox.mapboxsdk.utils.ThreadUtils;
 
 /**
@@ -93,12 +96,12 @@ public class MapSnapshotter {
     private float pixelRatio = 1;
     private int width;
     private int height;
-    private String styleUrl = Style.MAPBOX_STREETS;
+    private String styleUri = Style.MAPBOX_STREETS;
     private String styleJson;
     private LatLngBounds region;
     private CameraPosition cameraPosition;
     private boolean showLogo = true;
-    private String localIdeographFontFamily = "sans-serif";
+    private String localIdeographFontFamily = MapboxConstants.DEFAULT_FONT;
     private String apiBaseUrl;
 
     /**
@@ -114,12 +117,12 @@ public class MapSnapshotter {
     }
 
     /**
-     * @param url The style URL to use
+     * @param uri The style URI to use
      * @return the mutated {@link Options}
      */
     @NonNull
-    public Options withStyle(String url) {
-      this.styleUrl = url;
+    public Options withStyle(String uri) {
+      this.styleUri = uri;
       return this;
     }
 
@@ -182,14 +185,31 @@ public class MapSnapshotter {
      * <p>
      * The font family argument is passed to {@link android.graphics.Typeface#create(String, int)}.
      * Default system fonts are defined in &#x27;/system/etc/fonts.xml&#x27;
-     * Default font for local ideograph font family is "sans-serif".
-     *
+     * Default font for local ideograph font family is {@link MapboxConstants#DEFAULT_FONT}.
+     * </p>
      * @param fontFamily font family for local ideograph generation.
      * @return the mutated {@link Options}
      */
     @NonNull
     public Options withLocalIdeographFontFamily(String fontFamily) {
-      this.localIdeographFontFamily = fontFamily;
+      this.localIdeographFontFamily = FontUtils.extractValidFont(fontFamily);
+      return this;
+    }
+
+    /**
+     * Set a font family from range of font families for generating glyphs locally for ideographs in the
+     * &#x27;CJK Unified Ideographs&#x27; and &#x27;Hangul Syllables&#x27; ranges.
+     * <p>
+     * The font families are checked against the default system fonts defined in
+     * &#x27;/system/etc/fonts.xml&#x27;. Default font for local ideograph font family is
+     * {@link MapboxConstants#DEFAULT_FONT}.
+     * </p>
+     * @param fontFamilies font families for local ideograph generation.
+     * @return the mutated {@link Options}
+     */
+    @NonNull
+    public Options withLocalIdeographFontFamily(String... fontFamilies) {
+      this.localIdeographFontFamily = FontUtils.extractValidFont(fontFamilies);
       return this;
     }
 
@@ -198,10 +218,24 @@ public class MapSnapshotter {
      *
      * @param apiBaseUrl The base of our API endpoint
      * @return the mutated {@link Options}
+     * @deprecated use {@link  #withApiBaseUri(String)} instead
      */
+    @Deprecated
     @NonNull
     public Options withApiBaseUrl(String apiBaseUrl) {
       this.apiBaseUrl = apiBaseUrl;
+      return this;
+    }
+
+    /**
+     * Specifies the URI used for API endpoint.
+     *
+     * @param apiBaseUri The base of our API endpoint
+     * @return the mutated {@link Options}
+     */
+    @NonNull
+    public Options withApiBaseUri(String apiBaseUri) {
+      this.apiBaseUrl = apiBaseUri;
       return this;
     }
 
@@ -236,9 +270,18 @@ public class MapSnapshotter {
 
     /**
      * @return the style url
+     * @deprecated use {@link #getStyleUri()} instead
      */
+    @Deprecated
     public String getStyleUrl() {
-      return styleUrl;
+      return styleUri;
+    }
+
+    /**
+     * @return the style uri
+     */
+    public String getStyleUri() {
+      return styleUri;
     }
 
     /**
@@ -251,7 +294,7 @@ public class MapSnapshotter {
 
     /**
      * @return the font family used for locally generating ideographs,
-     * Default font for local ideograph font family is "sans-serif".
+     * Default font for local ideograph font family is {@link MapboxConstants#DEFAULT_FONT}.
      */
     public String getLocalIdeographFontFamily() {
       return localIdeographFontFamily;
@@ -259,9 +302,19 @@ public class MapSnapshotter {
 
     /**
      * @return The base of our API endpoint
+     * @deprecated use {@link #getApiBaseUri()} instead
      */
     @Nullable
+    @Deprecated
     public String getApiBaseUrl() {
+      return apiBaseUrl;
+    }
+
+    /**
+     * @return The base of our API endpoint
+     */
+    @Nullable
+    public String getApiBaseUri() {
       return apiBaseUrl;
     }
   }
@@ -286,11 +339,9 @@ public class MapSnapshotter {
       fileSource.setApiBaseUrl(apiBaseUrl);
     }
 
-    String programCacheDir = FileSource.getInternalCachePath(context);
-
     nativeInitialize(this, fileSource, options.pixelRatio, options.width,
-      options.height, options.styleUrl, options.styleJson, options.region, options.cameraPosition,
-      options.showLogo, programCacheDir, options.localIdeographFontFamily);
+      options.height, options.styleUri, options.styleJson, options.region, options.cameraPosition,
+      options.showLogo, options.localIdeographFontFamily);
   }
 
   /**
@@ -572,8 +623,7 @@ public class MapSnapshotter {
                                          FileSource fileSource, float pixelRatio,
                                          int width, int height, String styleUrl, String styleJson,
                                          LatLngBounds region, CameraPosition position,
-                                         boolean showLogo, String programCacheDir,
-                                         String localIdeographFontFamily);
+                                         boolean showLogo, String localIdeographFontFamily);
 
   @Keep
   protected native void nativeStart();

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "node_thread_pool.hpp"
-
 #include <mbgl/map/map.hpp>
 #include <mbgl/storage/file_source.hpp>
 #include <mbgl/util/image.hpp>
@@ -66,6 +64,10 @@ public:
     static void DumpDebugLogs(const Nan::FunctionCallbackInfo<v8::Value>&);
     static void QueryRenderedFeatures(const Nan::FunctionCallbackInfo<v8::Value>&);
 
+    static void SetFeatureState(const Nan::FunctionCallbackInfo<v8::Value>&);
+    static void GetFeatureState(const Nan::FunctionCallbackInfo<v8::Value>&);
+    static void RemoveFeatureState(const Nan::FunctionCallbackInfo<v8::Value>&);
+
     static v8::Local<v8::Value> ParseError(const char* msg);
 
     void startRender(RenderOptions options);
@@ -79,7 +81,6 @@ public:
     const float pixelRatio;
     mbgl::MapMode mode;
     bool crossSourceCollisions;
-    NodeThreadPool threadpool;
     NodeMapObserver mapObserver;
     std::unique_ptr<mbgl::HeadlessFrontend> frontend;
     std::unique_ptr<mbgl::Map> map;
@@ -96,6 +97,7 @@ public:
 
 struct NodeFileSource : public mbgl::FileSource {
     NodeFileSource(NodeMap* nodeMap_) : nodeMap(nodeMap_) {}
+    ~NodeFileSource() {}
     std::unique_ptr<mbgl::AsyncRequest> request(const mbgl::Resource&, mbgl::FileSource::Callback) final;
     NodeMap* nodeMap;
 };

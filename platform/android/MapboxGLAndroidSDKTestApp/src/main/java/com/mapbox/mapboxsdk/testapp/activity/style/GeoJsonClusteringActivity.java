@@ -21,15 +21,17 @@ import com.mapbox.mapboxsdk.style.layers.SymbolLayer;
 import com.mapbox.mapboxsdk.style.sources.GeoJsonOptions;
 import com.mapbox.mapboxsdk.style.sources.GeoJsonSource;
 import com.mapbox.mapboxsdk.testapp.R;
-import com.mapbox.mapboxsdk.testapp.utils.GeoParseUtil;
 import com.mapbox.mapboxsdk.utils.BitmapUtils;
 import timber.log.Timber;
 
-import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Objects;
 
 import static com.mapbox.mapboxsdk.style.expressions.Expression.all;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.accumulated;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.concat;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.division;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.exponential;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.get;
@@ -39,6 +41,8 @@ import static com.mapbox.mapboxsdk.style.expressions.Expression.has;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.interpolate;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.literal;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.lt;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.max;
+import static com.mapbox.mapboxsdk.style.expressions.Expression.neq;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.rgb;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.stop;
 import static com.mapbox.mapboxsdk.style.expressions.Expression.toNumber;
@@ -87,7 +91,7 @@ public class GeoJsonClusteringActivity extends AppCompatActivity {
 
       try {
         mapboxMap.setStyle(new Style.Builder()
-          .fromUrl(Style.LIGHT)
+          .fromUri(Style.LIGHT)
           .withSource(clusterSource = createClusterSource())
           .withLayer(createSymbolLayer())
           .withLayer(createClusterLevelLayer(0, clusterLayers))
@@ -98,7 +102,7 @@ public class GeoJsonClusteringActivity extends AppCompatActivity {
             BitmapUtils.getBitmapFromDrawable(getResources().getDrawable(R.drawable.ic_hearing_black_24dp))), true
           )
         );
-      } catch (IOException exception) {
+      } catch (URISyntaxException exception) {
         Timber.e(exception);
       }
 
@@ -133,13 +137,14 @@ public class GeoJsonClusteringActivity extends AppCompatActivity {
     }
   }
 
-  private GeoJsonSource createClusterSource() throws IOException {
-    String earthQuakes = GeoParseUtil.loadStringFromAssets(this, "earthquakes.geojson");
-    FeatureCollection featureCollection = FeatureCollection.fromJson(earthQuakes);
-    return new GeoJsonSource("earthquakes", featureCollection, new GeoJsonOptions()
+  private GeoJsonSource createClusterSource() throws URISyntaxException {
+    return new GeoJsonSource("earthquakes", new URI("asset://earthquakes.geojson"), new GeoJsonOptions()
       .withCluster(true)
       .withClusterMaxZoom(14)
       .withClusterRadius(50)
+      .withClusterProperty("max", max(accumulated(), get("max")), get("mag"))
+      .withClusterProperty("sum", literal("+"), get("mag"))
+      .withClusterProperty("felt", literal("any"), neq(get("felt"), literal("null")))
     );
   }
 
@@ -184,9 +189,9 @@ public class GeoJsonClusteringActivity extends AppCompatActivity {
   }
 
   private SymbolLayer createClusterTextLayer() {
-    return new SymbolLayer("count", "earthquakes")
+    return new SymbolLayer("property", "earthquakes")
       .withProperties(
-        textField(Expression.toString(get("point_count"))),
+        textField(concat(get("point_count"), literal(", "), get("max"))),
         textSize(12f),
         textColor(Color.WHITE),
         textIgnorePlacement(true),

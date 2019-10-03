@@ -15,11 +15,15 @@ public:
         backend.setViewport(0, 0, backend.getSize());
     }
 
+    void swap() override {
+        backend.swap();
+    }
+
 private:
     GLFWGLBackend& backend;
 };
 
-GLFWGLBackend::GLFWGLBackend(GLFWwindow* window_)
+GLFWGLBackend::GLFWGLBackend(GLFWwindow* window_, const bool capFrameRate)
     : mbgl::gl::RendererBackend(mbgl::gfx::ContextMode::Unique),
       mbgl::gfx::Renderable(
           [window_] {
@@ -29,6 +33,13 @@ GLFWGLBackend::GLFWGLBackend(GLFWwindow* window_)
           }(),
           std::make_unique<GLFWGLRenderableResource>(*this)),
       window(window_) {
+    glfwMakeContextCurrent(window);
+    if (!capFrameRate) {
+        // Disables vsync on platforms that support it.
+        glfwSwapInterval(0);
+    } else {
+        glfwSwapInterval(1);
+    }
 }
 
 GLFWGLBackend::~GLFWGLBackend() = default;
@@ -57,3 +68,19 @@ mbgl::Size GLFWGLBackend::getSize() const {
 void GLFWGLBackend::setSize(const mbgl::Size newSize) {
     size = newSize;
 }
+
+void GLFWGLBackend::swap() {
+    glfwSwapBuffers(window);
+}
+
+namespace mbgl {
+namespace gfx {
+
+template <>
+std::unique_ptr<GLFWBackend>
+Backend::Create<mbgl::gfx::Backend::Type::OpenGL>(GLFWwindow* window, bool capFrameRate) {
+    return std::make_unique<GLFWGLBackend>(window, capFrameRate);
+}
+
+} // namespace gfx
+} // namespace mbgl

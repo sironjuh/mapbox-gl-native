@@ -111,7 +111,7 @@ public final class Property {
   // SYMBOL_Z_ORDER: Controls the order in which overlapping symbols in the same layer are rendered
 
   /**
-   * If {@link SYMBOL_SORT_KEY} is set, sort based on that. Otherwise sort symbols by their y-position relative to the viewport.
+   * If symbol sort key is set, sort based on that. Otherwise sort symbols by their y-position relative to the viewport.
    */
   public static final String SYMBOL_Z_ORDER_AUTO = "auto";
   /**
@@ -668,6 +668,27 @@ public final class Property {
     })
   @Retention(RetentionPolicy.SOURCE)
   public @interface ANCHOR {}
+
+  // TEXT_WRITING_MODE: The property allows control over a symbol's orientation. Note that the property values act as a hint, so that a symbol whose language doesn’t support the provided orientation will be laid out in its natural orientation. Example: English point symbol will be rendered horizontally even if array value contains single 'vertical' enum value. The order of elements in an array define priority order for the placement of an orientation variant.
+
+  /**
+   * If a text's language supports horizontal writing mode, symbols with point placement would be laid out horizontally.
+   */
+  public static final String TEXT_WRITING_MODE_HORIZONTAL = "horizontal";
+  /**
+   * If a text's language supports vertical writing mode, symbols with point placement would be laid out vertically.
+   */
+  public static final String TEXT_WRITING_MODE_VERTICAL = "vertical";
+
+  /**
+   * The property allows control over a symbol's orientation. Note that the property values act as a hint, so that a symbol whose language doesn’t support the provided orientation will be laid out in its natural orientation. Example: English point symbol will be rendered horizontally even if array value contains single 'vertical' enum value. The order of elements in an array define priority order for the placement of an orientation variant.
+   */
+  @StringDef({
+      TEXT_WRITING_MODE_HORIZONTAL,
+      TEXT_WRITING_MODE_VERTICAL,
+    })
+  @Retention(RetentionPolicy.SOURCE)
+  public @interface TEXT_WRITING_MODE {}
 
 
   private Property() {

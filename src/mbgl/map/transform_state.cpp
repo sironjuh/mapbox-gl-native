@@ -3,6 +3,7 @@
 #include <mbgl/util/constants.hpp>
 #include <mbgl/util/interpolate.hpp>
 #include <mbgl/util/projection.hpp>
+#include <mbgl/util/tile_coordinate.hpp>
 #include <mbgl/math/log2.hpp>
 #include <mbgl/math/clamp.hpp>
 
@@ -33,26 +34,38 @@ void TransformState::getProjMatrix(mat4& projMatrix, uint16_t nearZ, bool aligne
         return;
     }
 
-     // Find the distance from the center point [width/2, height/2] to the
-    // center top point [width/2, 0] in Z units, using the law of sines.
+    const double cameraToCenterDistance = getCameraToCenterDistance();
+    auto offset = getCenterOffset();
+
+    // Find the Z distance from the viewport center point
+    // [width/2 + offset.x, height/2 + offset.y] to the top edge; to point
+    // [width/2 + offset.x, 0] in Z units.
     // 1 Z unit is equivalent to 1 horizontal px at the center of the map
     // (the distance between[width/2, height/2] and [width/2 + 1, height/2])
-    const double halfFov = getFieldOfView() / 2.0;
-    const double groundAngle = M_PI / 2.0 + getPitch();
-    const double topHalfSurfaceDistance = std::sin(halfFov) * getCameraToCenterDistance() / std::sin(M_PI - groundAngle - halfFov);
-
-
+    // See https://github.com/mapbox/mapbox-gl-native/pull/15195 for details.
+    // See TransformState::fov description: fov = 2 * arctan((height / 2) / (height * 1.5)).
+    const double tanFovAboveCenter = (size.height * 0.5 + offset.y) / (size.height * 1.5);
+    const double tanMultiple = tanFovAboveCenter * std::tan(getPitch());
+    assert(tanMultiple < 1);
     // Calculate z distance of the farthest fragment that should be rendered.
-    const double furthestDistance = std::cos(M_PI / 2 - getPitch()) * topHalfSurfaceDistance + getCameraToCenterDistance();
+    const double furthestDistance = cameraToCenterDistance / (1 - tanMultiple);
     // Add a bit extra to avoid precision problems when a fragment's distance is exactly `furthestDistance`
     const double farZ = furthestDistance * 1.01;
 
     matrix::perspective(projMatrix, getFieldOfView(), double(size.width) / size.height, nearZ, farZ);
 
-    const bool flippedY = viewportMode == ViewportMode::FlippedY;
-    matrix::scale(projMatrix, projMatrix, 1, flippedY ? 1 : -1, 1);
+    // Move the center of perspective to center of specified edgeInsets.
+    // Values are in range [-1, 1] where the upper and lower range values
+    // position viewport center to the screen edges. This is overriden
+    // if using axonometric perspective (not in public API yet, Issue #11882).
+    // TODO(astojilj): Issue #11882 should take edge insets into account, too.
+    projMatrix[8] = -offset.x * 2.0 / size.width;
+    projMatrix[9] = offset.y * 2.0 / size.height;
 
-    matrix::translate(projMatrix, projMatrix, 0, 0, -getCameraToCenterDistance());
+    const bool flippedY = viewportMode == ViewportMode::FlippedY;
+    matrix::scale(projMatrix, projMatrix, 1.0, flippedY ? 1 : -1, 1);
+
+    matrix::translate(projMatrix, projMatrix, 0, 0, -cameraToCenterDistance);
 
     using NO = NorthOrientation;
     switch (getNorthOrientation()) {
@@ -133,18 +146,10 @@ ViewportMode TransformState::getViewportMode() const {
 
 #pragma mark - Camera options
 
-CameraOptions TransformState::getCameraOptions(const EdgeInsets& padding) const {
-    LatLng center;
-    if (padding.isFlush()) {
-        center = getLatLng();
-    } else {
-        ScreenCoordinate point = padding.getCenter(size.width, size.height);
-        point.y = size.height - point.y;
-        center = screenCoordinateToLatLng(point).wrapped();
-    }
+CameraOptions TransformState::getCameraOptions(optional<EdgeInsets> padding) const {
     return CameraOptions()
-        .withCenter(center)
-        .withPadding(padding)
+        .withCenter(getLatLng())
+        .withPadding(padding ? padding : edgeInsets)
         .withZoom(getZoom())
         .withBearing(-bearing * util::RAD2DEG)
         .withPitch(pitch * util::RAD2DEG);
@@ -240,7 +245,6 @@ float TransformState::getPitch() const {
     return pitch;
 }
 
-
 #pragma mark - State
 
 bool TransformState::isChanging() const {
@@ -278,7 +282,7 @@ ScreenCoordinate TransformState::latLngToScreenCoordinate(const LatLng& latLng) 
         return {};
     }
 
-    mat4 mat = coordinatePointMatrix(getZoom());
+    mat4 mat = coordinatePointMatrix();
     vec4 p;
     Point<double> pt = Projection::project(latLng, scale) / util::tileSize;
     vec4 c = {{ pt.x, pt.y, 0, 1 }};
@@ -286,13 +290,13 @@ ScreenCoordinate TransformState::latLngToScreenCoordinate(const LatLng& latLng) 
     return { p[0] / p[3], size.height - p[1] / p[3] };
 }
 
-LatLng TransformState::screenCoordinateToLatLng(const ScreenCoordinate& point, LatLng::WrapMode wrapMode) const {
+TileCoordinate TransformState::screenCoordinateToTileCoordinate(const ScreenCoordinate& point, uint8_t atZoom) const {
     if (size.isEmpty()) {
-        return {};
+        return { {}, 0 };
     }
 
     float targetZ = 0;
-    mat4 mat = coordinatePointMatrix(getZoom());
+    mat4 mat = coordinatePointMatrix();
 
     mat4 inverted;
     bool err = matrix::invert(inverted, mat);
@@ -322,14 +326,19 @@ LatLng TransformState::screenCoordinateToLatLng(const ScreenCoordinate& point, L
     double z1 = coord1[2] / w1;
     double t = z0 == z1 ? 0 : (targetZ - z0) / (z1 - z0);
 
-    return Projection::unproject(util::interpolate(p0, p1, t), scale / util::tileSize, wrapMode);
+    Point<double> p = util::interpolate(p0, p1, t) / scale * static_cast<double>(1 << atZoom);
+    return { { p.x, p.y }, static_cast<double>(atZoom) };
 }
 
-mat4 TransformState::coordinatePointMatrix(double z) const {
+LatLng TransformState::screenCoordinateToLatLng(const ScreenCoordinate& point, LatLng::WrapMode wrapMode) const {
+    auto coord = screenCoordinateToTileCoordinate(point, 0);
+    return Projection::unproject(coord.p, 1 / util::tileSize, wrapMode);
+}
+
+mat4 TransformState::coordinatePointMatrix() const {
     mat4 proj;
     getProjMatrix(proj);
-    float s = Projection::worldSize(scale) / std::pow(2, z);
-    matrix::scale(proj, proj, s, s, 1);
+    matrix::scale(proj, proj, util::tileSize, util::tileSize, 1);
     matrix::multiply(proj, getPixelMatrix(), proj);
     return proj;
 }
@@ -369,6 +378,10 @@ void TransformState::constrain(double& scale_, double& x_, double& y_) const {
         double max_x = (scale_ * util::tileSize - (rotatedNorth() ? size.height : size.width)) / 2;
         x_ = std::max(-max_x, std::min(x_, max_x));
     }
+}
+
+ScreenCoordinate TransformState::getCenterOffset() const {
+    return { 0.5 * (edgeInsets.left() - edgeInsets.right()), 0.5 * (edgeInsets.top() - edgeInsets.bottom()) };
 }
 
 void TransformState::moveLatLng(const LatLng& latLng, const ScreenCoordinate& anchor) {
@@ -426,7 +439,7 @@ float TransformState::maxPitchScaleFactor() const {
         return {};
     }
     auto latLng = screenCoordinateToLatLng({ 0, static_cast<float>(getSize().height) });
-    mat4 mat = coordinatePointMatrix(getZoom());
+    mat4 mat = coordinatePointMatrix();
     Point<double> pt = Projection::project(latLng, scale) / util::tileSize;
     vec4 p = {{ pt.x, pt.y, 0, 1 }};
     vec4 topPoint;

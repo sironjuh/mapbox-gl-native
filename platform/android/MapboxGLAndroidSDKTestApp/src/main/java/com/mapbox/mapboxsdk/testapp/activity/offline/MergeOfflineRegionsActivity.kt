@@ -24,7 +24,7 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
     override fun onFileCopiedFromAssets() {
       Toast.makeText(
         this@MergeOfflineRegionsActivity,
-        String.format("OnFileCOpied."),
+        String.format("OnFileCopied."),
         Toast.LENGTH_LONG).show()
       mergeDb()
     }
@@ -40,7 +40,7 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
   private val onRegionMergedListener = object : OfflineManager.MergeOfflineRegionsCallback {
     override fun onMerge(offlineRegions: Array<OfflineRegion>) {
       mapView.getMapAsync {
-        it.setStyle(Style.Builder().fromUrl(TEST_STYLE))
+        it.setStyle(Style.Builder().fromUri(TEST_STYLE))
       }
       Toast.makeText(
         this@MergeOfflineRegionsActivity,
@@ -57,6 +57,27 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
     }
   }
 
+  /**
+   * Since we expect from the results of the offline merge callback to interact with the hosting activity,
+   * we need to ensure that we are not interacting with a destroyed activity.
+   */
+  private class MergeCallback(private var activityCallback: OfflineManager.MergeOfflineRegionsCallback?) : OfflineManager.MergeOfflineRegionsCallback {
+
+    override fun onMerge(offlineRegions: Array<out OfflineRegion>?) {
+      activityCallback?.onMerge(offlineRegions)
+    }
+
+    override fun onError(error: String?) {
+      activityCallback?.onError(error)
+    }
+
+    fun onActivityDestroy() {
+      activityCallback = null
+    }
+  }
+
+  private val mergeCallback = MergeCallback(onRegionMergedListener)
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_merge_offline_regions)
@@ -70,7 +91,7 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
     }
     mapView.getMapAsync {
       it.isDebugActive = true
-      it.setStyle(Style.Builder().fromUrl(TEST_STYLE))
+      it.setStyle(Style.Builder().fromUri(TEST_STYLE))
     }
   }
 
@@ -81,7 +102,7 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
 
   private fun mergeDb() {
     OfflineManager.getInstance(this).mergeOfflineRegions(
-      FileSource.getResourcesCachePath(this) + "/" + TEST_DB_FILE_NAME, onRegionMergedListener
+      FileSource.getResourcesCachePath(this) + "/" + TEST_DB_FILE_NAME, mergeCallback
     )
   }
 
@@ -112,6 +133,7 @@ class MergeOfflineRegionsActivity : AppCompatActivity() {
 
   override fun onDestroy() {
     super.onDestroy()
+    mergeCallback.onActivityDestroy()
     mapView.onDestroy()
 
     // restoring connectivity state

@@ -106,9 +106,9 @@ public:
             const auto i = patternFeature.i;
             std::unique_ptr<GeometryTileFeature> feature = std::move(patternFeature.feature);
             const PatternLayerMap& patterns = patternFeature.patterns;
-            GeometryCollection geometries = feature->getGeometries();
+            const GeometryCollection& geometries = feature->getGeometries();
 
-            bucket->addFeature(*feature, geometries, patternPositions, patterns);
+            bucket->addFeature(*feature, geometries, patternPositions, patterns, i);
             featureIndex->insert(geometries, i, sourceLayerID, bucketLeaderID);
         }
         if (bucket->hasData()) {

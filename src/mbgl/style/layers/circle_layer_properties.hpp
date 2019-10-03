@@ -1,3 +1,5 @@
+// clang-format off
+
 // This file is generated. Edit scripts/generate-style-code.js, then run `make style-code`.
 
 #pragma once
@@ -80,6 +82,8 @@ public:
         CirclePaintProperties::PossiblyEvaluated);
     ~CircleLayerProperties() override;
 
+    unsigned long constantsMask() const override;
+
     const CircleLayer::Impl& layerImpl() const;
     // Data members.
     CirclePaintProperties::PossiblyEvaluated evaluated;
@@ -87,3 +91,5 @@ public:
 
 } // namespace style
 } // namespace mbgl
+
+// clang-format on

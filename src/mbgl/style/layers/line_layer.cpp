@@ -9,6 +9,7 @@
 #include <mbgl/style/conversion/transition_options.hpp>
 #include <mbgl/style/conversion/json.hpp>
 #include <mbgl/style/conversion_impl.hpp>
+#include <mbgl/util/traits.hpp>
 
 #include <mapbox/eternal.hpp>
 
@@ -18,13 +19,13 @@ namespace style {
 
 // static
 const LayerTypeInfo* LineLayer::Impl::staticTypeInfo() noexcept {
-    const static LayerTypeInfo typeInfo
-        {"line",
-          LayerTypeInfo::Source::Required,
-          LayerTypeInfo::Pass3D::NotRequired,
-          LayerTypeInfo::Layout::Required,
-          LayerTypeInfo::FadingTiles::NotRequired
-        };
+    const static LayerTypeInfo typeInfo{"line",
+                                        LayerTypeInfo::Source::Required,
+                                        LayerTypeInfo::Pass3D::NotRequired,
+                                        LayerTypeInfo::Layout::Required,
+                                        LayerTypeInfo::FadingTiles::NotRequired,
+                                        LayerTypeInfo::CrossTileIndex::NotRequired,
+                                        LayerTypeInfo::TileKind::Geometry};
     return &typeInfo;
 }
 
@@ -427,60 +428,77 @@ TransitionOptions LineLayer::getLineWidthTransition() const {
 
 using namespace conversion;
 
+namespace {
+
+enum class Property : uint8_t {
+    LineBlur,
+    LineColor,
+    LineDasharray,
+    LineGapWidth,
+    LineGradient,
+    LineOffset,
+    LineOpacity,
+    LinePattern,
+    LineTranslate,
+    LineTranslateAnchor,
+    LineWidth,
+    LineBlurTransition,
+    LineColorTransition,
+    LineDasharrayTransition,
+    LineGapWidthTransition,
+    LineGradientTransition,
+    LineOffsetTransition,
+    LineOpacityTransition,
+    LinePatternTransition,
+    LineTranslateTransition,
+    LineTranslateAnchorTransition,
+    LineWidthTransition,
+    LineCap,
+    LineJoin,
+    LineMiterLimit,
+    LineRoundLimit,
+};
+
+template <typename T>
+constexpr uint8_t toUint8(T t) noexcept {
+    return uint8_t(mbgl::underlying_type(t));
+}
+
+MAPBOX_ETERNAL_CONSTEXPR const auto layerProperties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>(
+    {{"line-blur", toUint8(Property::LineBlur)},
+     {"line-color", toUint8(Property::LineColor)},
+     {"line-dasharray", toUint8(Property::LineDasharray)},
+     {"line-gap-width", toUint8(Property::LineGapWidth)},
+     {"line-gradient", toUint8(Property::LineGradient)},
+     {"line-offset", toUint8(Property::LineOffset)},
+     {"line-opacity", toUint8(Property::LineOpacity)},
+     {"line-pattern", toUint8(Property::LinePattern)},
+     {"line-translate", toUint8(Property::LineTranslate)},
+     {"line-translate-anchor", toUint8(Property::LineTranslateAnchor)},
+     {"line-width", toUint8(Property::LineWidth)},
+     {"line-blur-transition", toUint8(Property::LineBlurTransition)},
+     {"line-color-transition", toUint8(Property::LineColorTransition)},
+     {"line-dasharray-transition", toUint8(Property::LineDasharrayTransition)},
+     {"line-gap-width-transition", toUint8(Property::LineGapWidthTransition)},
+     {"line-gradient-transition", toUint8(Property::LineGradientTransition)},
+     {"line-offset-transition", toUint8(Property::LineOffsetTransition)},
+     {"line-opacity-transition", toUint8(Property::LineOpacityTransition)},
+     {"line-pattern-transition", toUint8(Property::LinePatternTransition)},
+     {"line-translate-transition", toUint8(Property::LineTranslateTransition)},
+     {"line-translate-anchor-transition", toUint8(Property::LineTranslateAnchorTransition)},
+     {"line-width-transition", toUint8(Property::LineWidthTransition)},
+     {"line-cap", toUint8(Property::LineCap)},
+     {"line-join", toUint8(Property::LineJoin)},
+     {"line-miter-limit", toUint8(Property::LineMiterLimit)},
+     {"line-round-limit", toUint8(Property::LineRoundLimit)}});
+
+constexpr uint8_t lastPaintPropertyIndex = toUint8(Property::LineWidthTransition);
+} // namespace
+
 optional<Error> LineLayer::setPaintProperty(const std::string& name, const Convertible& value) {
-    enum class Property : uint8_t {
-        LineBlur,
-        LineColor,
-        LineDasharray,
-        LineGapWidth,
-        LineGradient,
-        LineOffset,
-        LineOpacity,
-        LinePattern,
-        LineTranslate,
-        LineTranslateAnchor,
-        LineWidth,
-        LineBlurTransition,
-        LineColorTransition,
-        LineDasharrayTransition,
-        LineGapWidthTransition,
-        LineGradientTransition,
-        LineOffsetTransition,
-        LineOpacityTransition,
-        LinePatternTransition,
-        LineTranslateTransition,
-        LineTranslateAnchorTransition,
-        LineWidthTransition,
-    };
-
-    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
-        { "line-blur", static_cast<uint8_t>(Property::LineBlur) },
-        { "line-color", static_cast<uint8_t>(Property::LineColor) },
-        { "line-dasharray", static_cast<uint8_t>(Property::LineDasharray) },
-        { "line-gap-width", static_cast<uint8_t>(Property::LineGapWidth) },
-        { "line-gradient", static_cast<uint8_t>(Property::LineGradient) },
-        { "line-offset", static_cast<uint8_t>(Property::LineOffset) },
-        { "line-opacity", static_cast<uint8_t>(Property::LineOpacity) },
-        { "line-pattern", static_cast<uint8_t>(Property::LinePattern) },
-        { "line-translate", static_cast<uint8_t>(Property::LineTranslate) },
-        { "line-translate-anchor", static_cast<uint8_t>(Property::LineTranslateAnchor) },
-        { "line-width", static_cast<uint8_t>(Property::LineWidth) },
-        { "line-blur-transition", static_cast<uint8_t>(Property::LineBlurTransition) },
-        { "line-color-transition", static_cast<uint8_t>(Property::LineColorTransition) },
-        { "line-dasharray-transition", static_cast<uint8_t>(Property::LineDasharrayTransition) },
-        { "line-gap-width-transition", static_cast<uint8_t>(Property::LineGapWidthTransition) },
-        { "line-gradient-transition", static_cast<uint8_t>(Property::LineGradientTransition) },
-        { "line-offset-transition", static_cast<uint8_t>(Property::LineOffsetTransition) },
-        { "line-opacity-transition", static_cast<uint8_t>(Property::LineOpacityTransition) },
-        { "line-pattern-transition", static_cast<uint8_t>(Property::LinePatternTransition) },
-        { "line-translate-transition", static_cast<uint8_t>(Property::LineTranslateTransition) },
-        { "line-translate-anchor-transition", static_cast<uint8_t>(Property::LineTranslateAnchorTransition) },
-        { "line-width-transition", static_cast<uint8_t>(Property::LineWidthTransition) }
-    });
-
-    const auto it = properties.find(name.c_str());
-    if (it == properties.end()) {
-        return Error { "layer doesn't support this property" };
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end() || it->second > lastPaintPropertyIndex) {
+        return Error{"layer doesn't support this property"};
     }
 
     auto property = static_cast<Property>(it->second);
@@ -598,85 +616,134 @@ optional<Error> LineLayer::setPaintProperty(const std::string& name, const Conve
     if (!transition) {
         return error;
     }
-    
+
     if (property == Property::LineBlurTransition) {
         setLineBlurTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineColorTransition) {
         setLineColorTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineDasharrayTransition) {
         setLineDasharrayTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineGapWidthTransition) {
         setLineGapWidthTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineGradientTransition) {
         setLineGradientTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineOffsetTransition) {
         setLineOffsetTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineOpacityTransition) {
         setLineOpacityTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LinePatternTransition) {
         setLinePatternTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineTranslateTransition) {
         setLineTranslateTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineTranslateAnchorTransition) {
         setLineTranslateAnchorTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::LineWidthTransition) {
         setLineWidthTransition(*transition);
         return nullopt;
     }
-    
 
-    return Error { "layer doesn't support this property" };
+    return Error{"layer doesn't support this property"};
+}
+
+StyleProperty LineLayer::getProperty(const std::string& name) const {
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end()) {
+        return {};
+    }
+
+    switch (static_cast<Property>(it->second)) {
+        case Property::LineBlur:
+            return makeStyleProperty(getLineBlur());
+        case Property::LineColor:
+            return makeStyleProperty(getLineColor());
+        case Property::LineDasharray:
+            return makeStyleProperty(getLineDasharray());
+        case Property::LineGapWidth:
+            return makeStyleProperty(getLineGapWidth());
+        case Property::LineGradient:
+            return makeStyleProperty(getLineGradient());
+        case Property::LineOffset:
+            return makeStyleProperty(getLineOffset());
+        case Property::LineOpacity:
+            return makeStyleProperty(getLineOpacity());
+        case Property::LinePattern:
+            return makeStyleProperty(getLinePattern());
+        case Property::LineTranslate:
+            return makeStyleProperty(getLineTranslate());
+        case Property::LineTranslateAnchor:
+            return makeStyleProperty(getLineTranslateAnchor());
+        case Property::LineWidth:
+            return makeStyleProperty(getLineWidth());
+        case Property::LineBlurTransition:
+            return makeStyleProperty(getLineBlurTransition());
+        case Property::LineColorTransition:
+            return makeStyleProperty(getLineColorTransition());
+        case Property::LineDasharrayTransition:
+            return makeStyleProperty(getLineDasharrayTransition());
+        case Property::LineGapWidthTransition:
+            return makeStyleProperty(getLineGapWidthTransition());
+        case Property::LineGradientTransition:
+            return makeStyleProperty(getLineGradientTransition());
+        case Property::LineOffsetTransition:
+            return makeStyleProperty(getLineOffsetTransition());
+        case Property::LineOpacityTransition:
+            return makeStyleProperty(getLineOpacityTransition());
+        case Property::LinePatternTransition:
+            return makeStyleProperty(getLinePatternTransition());
+        case Property::LineTranslateTransition:
+            return makeStyleProperty(getLineTranslateTransition());
+        case Property::LineTranslateAnchorTransition:
+            return makeStyleProperty(getLineTranslateAnchorTransition());
+        case Property::LineWidthTransition:
+            return makeStyleProperty(getLineWidthTransition());
+        case Property::LineCap:
+            return makeStyleProperty(getLineCap());
+        case Property::LineJoin:
+            return makeStyleProperty(getLineJoin());
+        case Property::LineMiterLimit:
+            return makeStyleProperty(getLineMiterLimit());
+        case Property::LineRoundLimit:
+            return makeStyleProperty(getLineRoundLimit());
+    }
+    return {};
 }
 
 optional<Error> LineLayer::setLayoutProperty(const std::string& name, const Convertible& value) {
     if (name == "visibility") {
         return Layer::setVisibility(value);
     }
-    enum class Property {
-        LineCap,
-        LineJoin,
-        LineMiterLimit,
-        LineRoundLimit,
-    };
-    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
-        { "line-cap", static_cast<uint8_t>(Property::LineCap) },
-        { "line-join", static_cast<uint8_t>(Property::LineJoin) },
-        { "line-miter-limit", static_cast<uint8_t>(Property::LineMiterLimit) },
-        { "line-round-limit", static_cast<uint8_t>(Property::LineRoundLimit) }
-    });
-
-    const auto it = properties.find(name.c_str());
-    if (it == properties.end()) {
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end() || it->second <= lastPaintPropertyIndex) {
         return Error { "layer doesn't support this property" };
     }
 

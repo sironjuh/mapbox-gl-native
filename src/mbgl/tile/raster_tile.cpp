@@ -1,4 +1,5 @@
 #include <mbgl/tile/raster_tile.hpp>
+
 #include <mbgl/tile/raster_tile_worker.hpp>
 #include <mbgl/tile/tile_observer.hpp>
 #include <mbgl/tile/tile_loader_impl.hpp>
@@ -6,6 +7,7 @@
 #include <mbgl/storage/resource.hpp>
 #include <mbgl/storage/response.hpp>
 #include <mbgl/renderer/tile_parameters.hpp>
+#include <mbgl/renderer/tile_render_data.hpp>
 #include <mbgl/renderer/buckets/raster_bucket.hpp>
 #include <mbgl/actor/scheduler.hpp>
 
@@ -17,11 +19,15 @@ RasterTile::RasterTile(const OverscaledTileID& id_,
     : Tile(Kind::Raster, id_),
       loader(*this, id_, parameters, tileset),
       mailbox(std::make_shared<Mailbox>(*Scheduler::GetCurrent())),
-      worker(parameters.workerScheduler,
+      worker(Scheduler::GetBackground(),
              ActorRef<RasterTile>(*this, mailbox)) {
 }
 
 RasterTile::~RasterTile() = default;
+
+std::unique_ptr<TileRenderData> RasterTile::createRenderData() {
+    return std::make_unique<SharedBucketTileRenderData<RasterBucket>>(bucket);
+}
 
 void RasterTile::setError(std::exception_ptr err) {
     loaded = true;
@@ -57,14 +63,8 @@ void RasterTile::onError(std::exception_ptr err, const uint64_t resultCorrelatio
     observer->onTileError(*this, err);
 }
 
-void RasterTile::upload(gfx::Context& context) {
-    if (bucket) {
-        bucket->upload(context);
-    }
-}
-
-Bucket* RasterTile::getBucket(const style::Layer::Impl&) const {
-    return bucket.get();
+bool RasterTile::layerPropertiesUpdated(const Immutable<style::LayerProperties>&) {
+    return bool(bucket);
 }
 
 void RasterTile::setMask(TileMask&& mask) {

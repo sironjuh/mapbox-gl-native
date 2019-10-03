@@ -88,15 +88,14 @@ class HTTPFileSource::Impl {
 public:
     Impl() {
         @autoreleasepool {
-
-            NSURLSessionConfiguration *sessionConfig =
-            [MGLNetworkConfiguration sharedManager].sessionConfiguration;
-            
+            NSURLSessionConfiguration *sessionConfig = [MGLNetworkConfiguration sharedManager].sessionConfiguration;
             session = [NSURLSession sessionWithConfiguration:sessionConfig];
 
             userAgent = getUserAgent();
 
-            accountType = [[NSUserDefaults standardUserDefaults] integerForKey:@"MGLMapboxAccountType"];
+#if TARGET_OS_IPHONE || TARGET_OS_SIMULATOR
+            accountType = [[NSUserDefaults standardUserDefaults] integerForKey:MGLMapboxAccountTypeKey];
+#endif
         }
     }
 
@@ -196,32 +195,44 @@ HTTPFileSource::HTTPFileSource()
 
 HTTPFileSource::~HTTPFileSource() = default;
 
+MGL_EXPORT
+NSURL *resourceURLWithAccountType(const Resource& resource, NSInteger accountType) {
+    
+    NSURL *url = [NSURL URLWithString:@(resource.url.c_str())];
+    
+#if TARGET_OS_IPHONE || TARGET_OS_SIMULATOR
+    if (accountType == 0 &&
+        ([url.host isEqualToString:@"mapbox.com"] || [url.host hasSuffix:@".mapbox.com"])) {
+        NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
+        NSMutableArray *queryItems = [NSMutableArray array];
+
+        if (resource.usage == Resource::Usage::Offline) {
+            [queryItems addObject:[NSURLQueryItem queryItemWithName:@"offline" value:@"true"]];
+        } else {
+            // Only add SKU token to requests not tagged as "offline" usage.
+            [queryItems addObject:[NSURLQueryItem queryItemWithName:@"sku" value:MGLAccountManager.skuToken]];
+        }
+        
+        if (components.queryItems) {
+            [queryItems addObjectsFromArray:components.queryItems];
+        }
+        
+        components.queryItems = queryItems;
+        url = components.URL;
+    }
+#else
+    (void)accountType;
+#endif
+    return url;
+}
+    
 std::unique_ptr<AsyncRequest> HTTPFileSource::request(const Resource& resource, Callback callback) {
     auto request = std::make_unique<HTTPRequest>(callback);
     auto shared = request->shared; // Explicit copy so that it also gets copied into the completion handler block below.
 
     @autoreleasepool {
-        NSURL *url = [NSURL URLWithString:@(resource.url.c_str())];
+        NSURL *url = resourceURLWithAccountType(resource, impl->accountType);
         MGLLogDebug(@"Requesting URI: %@", url.relativePath);
-
-#if TARGET_OS_IPHONE || TARGET_OS_SIMULATOR
-        if (impl->accountType == 0 &&
-            ([url.host isEqualToString:@"mapbox.com"] || [url.host hasSuffix:@".mapbox.com"])) {
-            NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
-            NSURLQueryItem *accountsQueryItem = nil;
-
-            // Only add the token if we have enabled the accounts SDK
-            if (MGLAccountManager.isAccountsSDKEnabled) {
-                NSCAssert(MGLAccountManager.skuToken, @"skuToken should be non-nil if the accounts SDK is enabled");
-                accountsQueryItem = [NSURLQueryItem queryItemWithName:@"sku" value:MGLAccountManager.skuToken];
-            } else {
-                accountsQueryItem = [NSURLQueryItem queryItemWithName:@"events" value:@"true"];
-            }
-
-            components.queryItems = components.queryItems ? [components.queryItems arrayByAddingObject:accountsQueryItem] : @[accountsQueryItem];
-            url = components.URL;
-        }
-#endif
 
         NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
         if (resource.priorEtag) {
@@ -233,8 +244,10 @@ std::unique_ptr<AsyncRequest> HTTPFileSource::request(const Resource& resource, 
         }
 
         [req addValue:impl->userAgent forHTTPHeaderField:@"User-Agent"];
-        
-        if (resource.kind == mbgl::Resource::Kind::Tile) {
+
+        const bool isTile = resource.kind == mbgl::Resource::Kind::Tile;
+
+        if (isTile) {
             [[MGLNetworkConfiguration sharedManager] startDownloadEvent:url.relativePath type:@"tile"];
         }
         
@@ -242,10 +255,10 @@ std::unique_ptr<AsyncRequest> HTTPFileSource::request(const Resource& resource, 
             dataTaskWithRequest:req
               completionHandler:^(NSData* data, NSURLResponse* res, NSError* error) {
                 if (error && [error code] == NSURLErrorCancelled) {
-                    [[MGLNetworkConfiguration sharedManager] cancelDownloadEvent:res.URL.relativePath];
+                    [[MGLNetworkConfiguration sharedManager] cancelDownloadEventForResponse:res];
                     return;
                 }
-                [[MGLNetworkConfiguration sharedManager] stopDownloadEvent:res.URL.relativePath];
+                [[MGLNetworkConfiguration sharedManager] stopDownloadEventForResponse:res];
                 Response response;
                 using Error = Response::Error;
 
@@ -310,7 +323,7 @@ std::unique_ptr<AsyncRequest> HTTPFileSource::request(const Resource& resource, 
 
                     if (responseCode == 200) {
                         response.data = std::make_shared<std::string>((const char *)[data bytes], [data length]);
-                    } else if (responseCode == 204 || (responseCode == 404 && resource.kind == Resource::Kind::Tile)) {
+                    } else if (responseCode == 204 || (responseCode == 404 && isTile)) {
                         response.noContent = true;
                     } else if (responseCode == 304) {
                         response.notModified = true;

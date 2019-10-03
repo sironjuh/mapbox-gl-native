@@ -50,10 +50,9 @@ FillExtrusionBucket::FillExtrusionBucket(const FillExtrusionBucket::PossiblyEval
 
 FillExtrusionBucket::~FillExtrusionBucket() = default;
 
-void FillExtrusionBucket::addFeature(const GeometryTileFeature& feature,
-                                     const GeometryCollection& geometry,
-                                     const ImagePositions& patternPositions,
-                                     const PatternLayerMap& patternDependencies) {
+void FillExtrusionBucket::addFeature(const GeometryTileFeature& feature, const GeometryCollection& geometry,
+                                     const ImagePositions& patternPositions, const PatternLayerMap& patternDependencies,
+                                     std::size_t index) {
     for (auto& polygon : classifyRings(geometry)) {
         // Optimize polygons with many interior rings for earcut tesselation.
         limitHoles(polygon, 500);
@@ -158,19 +157,21 @@ void FillExtrusionBucket::addFeature(const GeometryTileFeature& feature,
     for (auto& pair : paintPropertyBinders) {
         const auto it = patternDependencies.find(pair.first);
         if (it != patternDependencies.end()){
-            pair.second.populateVertexVectors(feature, vertices.elements(), patternPositions, it->second);
+            pair.second.populateVertexVectors(feature, vertices.elements(), index, patternPositions, it->second);
         } else {
-            pair.second.populateVertexVectors(feature, vertices.elements(), patternPositions, {});
+            pair.second.populateVertexVectors(feature, vertices.elements(), index, patternPositions, {});
         }
     }
 }
 
-void FillExtrusionBucket::upload(gfx::Context& context) {
-    vertexBuffer = context.createVertexBuffer(std::move(vertices));
-    indexBuffer = context.createIndexBuffer(std::move(triangles));
+void FillExtrusionBucket::upload(gfx::UploadPass& uploadPass) {
+    if (!uploaded) {
+        vertexBuffer = uploadPass.createVertexBuffer(std::move(vertices));
+        indexBuffer = uploadPass.createIndexBuffer(std::move(triangles));
+    }
 
     for (auto& pair : paintPropertyBinders) {
-        pair.second.upload(context);
+        pair.second.upload(uploadPass);
     }
 
     uploaded = true;
@@ -180,14 +181,19 @@ bool FillExtrusionBucket::hasData() const {
     return !triangleSegments.empty();
 }
 
-bool FillExtrusionBucket::supportsLayer(const style::Layer::Impl& impl) const {
-    return style::FillExtrusionLayer::Impl::staticTypeInfo() == impl.getTypeInfo();
-}
-
 float FillExtrusionBucket::getQueryRadius(const RenderLayer& layer) const {
     const auto& evaluated = getEvaluated<FillExtrusionLayerProperties>(layer.evaluatedProperties);
     const std::array<float, 2>& translate = evaluated.get<FillExtrusionTranslate>();
     return util::length(translate[0], translate[1]);
+}
+
+void FillExtrusionBucket::update(const FeatureStates& states, const GeometryTileLayer& layer,
+                                 const std::string& layerID, const ImagePositions& imagePositions) {
+    auto it = paintPropertyBinders.find(layerID);
+    if (it != paintPropertyBinders.end()) {
+        it->second.updateVertexVectors(states, layer, imagePositions);
+        uploaded = false;
+    }
 }
 
 } // namespace mbgl

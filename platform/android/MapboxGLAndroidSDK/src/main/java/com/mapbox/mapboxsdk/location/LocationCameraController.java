@@ -17,9 +17,12 @@ import com.mapbox.mapboxsdk.camera.CameraUpdateFactory;
 import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.location.modes.CameraMode;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
+import com.mapbox.mapboxsdk.maps.Transform;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import static com.mapbox.mapboxsdk.location.LocationComponentConstants.TRANSITION_ANIMATION_DURATION_MS;
 
 final class LocationCameraController {
 
@@ -27,6 +30,7 @@ final class LocationCameraController {
   private int cameraMode;
 
   private final MapboxMap mapboxMap;
+  private final Transform transform;
   private final OnCameraTrackingChangedListener internalCameraTrackingChangedListener;
   private LocationComponentOptions options;
   private boolean adjustFocalPoint;
@@ -42,10 +46,12 @@ final class LocationCameraController {
   LocationCameraController(
     Context context,
     MapboxMap mapboxMap,
+    Transform transform,
     OnCameraTrackingChangedListener internalCameraTrackingChangedListener,
     @NonNull LocationComponentOptions options,
     OnCameraMoveInvalidateListener onCameraMoveInvalidateListener) {
     this.mapboxMap = mapboxMap;
+    this.transform = transform;
 
     initialGesturesManager = mapboxMap.getGesturesManager();
     internalGesturesManager = new LocationGesturesManager(context);
@@ -61,12 +67,14 @@ final class LocationCameraController {
 
   // Package private for testing purposes
   LocationCameraController(MapboxMap mapboxMap,
+                           Transform transform,
                            MoveGestureDetector moveGestureDetector,
                            OnCameraTrackingChangedListener internalCameraTrackingChangedListener,
                            OnCameraMoveInvalidateListener onCameraMoveInvalidateListener,
                            AndroidGesturesManager initialGesturesManager,
                            AndroidGesturesManager internalGesturesManager) {
     this.mapboxMap = mapboxMap;
+    this.transform = transform;
     this.moveGestureDetector = moveGestureDetector;
     this.internalCameraTrackingChangedListener = internalCameraTrackingChangedListener;
     this.onCameraMoveInvalidateListener = onCameraMoveInvalidateListener;
@@ -87,11 +95,17 @@ final class LocationCameraController {
   }
 
   void setCameraMode(@CameraMode.Mode int cameraMode) {
-    setCameraMode(cameraMode, null, null);
+    setCameraMode(cameraMode, null, TRANSITION_ANIMATION_DURATION_MS, null, null, null, null);
   }
 
   void setCameraMode(@CameraMode.Mode final int cameraMode, @Nullable Location lastLocation,
+                     long transitionDuration,
+                     @Nullable Double zoom, @Nullable Double bearing, @Nullable Double tilt,
                      @Nullable OnLocationCameraTransitionListener internalTransitionListener) {
+    if (this.cameraMode == cameraMode) {
+      return;
+    }
+
     final boolean wasTracking = isLocationTracking();
     this.cameraMode = cameraMode;
 
@@ -101,7 +115,8 @@ final class LocationCameraController {
 
     adjustGesturesThresholds();
     notifyCameraTrackingChangeListener(wasTracking);
-    transitionToCurrentLocation(wasTracking, lastLocation, internalTransitionListener);
+    transitionToCurrentLocation(
+      wasTracking, lastLocation, transitionDuration, zoom, bearing, tilt, internalTransitionListener);
   }
 
   /**
@@ -109,13 +124,26 @@ final class LocationCameraController {
    * Notifies an internal listener when the transition's finished to invalidate animators and notify external listeners.
    */
   private void transitionToCurrentLocation(boolean wasTracking, Location lastLocation,
+                                           long transitionDuration,
+                                           Double zoom, Double bearing, Double tilt,
                                            final OnLocationCameraTransitionListener internalTransitionListener) {
     if (!wasTracking && isLocationTracking() && lastLocation != null) {
       isTransitioning = true;
       LatLng target = new LatLng(lastLocation);
+
       CameraPosition.Builder builder = new CameraPosition.Builder().target(target);
-      if (isLocationBearingTracking()) {
-        builder.bearing(cameraMode == CameraMode.TRACKING_GPS_NORTH ? 0 : lastLocation.getBearing());
+      if (zoom != null) {
+        builder.zoom(zoom);
+      }
+      if (tilt != null) {
+        builder.tilt(tilt);
+      }
+      if (bearing != null) {
+        builder.bearing(bearing);
+      } else {
+        if (isLocationBearingTracking()) {
+          builder.bearing(cameraMode == CameraMode.TRACKING_GPS_NORTH ? 0 : lastLocation.getBearing());
+        }
       }
 
       CameraUpdate update = CameraUpdateFactory.newCameraPosition(builder.build());
@@ -139,13 +167,15 @@ final class LocationCameraController {
 
       CameraPosition currentPosition = mapboxMap.getCameraPosition();
       if (Utils.immediateAnimation(mapboxMap.getProjection(), currentPosition.target, target)) {
-        mapboxMap.moveCamera(
+        transform.moveCamera(
+          mapboxMap,
           update,
           callback);
       } else {
-        mapboxMap.animateCamera(
+        transform.animateCamera(
+          mapboxMap,
           update,
-          (int) LocationComponentConstants.TRANSITION_ANIMATION_DURATION_MS,
+          (int) transitionDuration,
           callback);
       }
     } else {
@@ -164,7 +194,7 @@ final class LocationCameraController {
       return;
     }
 
-    mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(bearing));
+    transform.moveCamera(mapboxMap, CameraUpdateFactory.bearingTo(bearing), null);
     onCameraMoveInvalidateListener.onInvalidateCameraMove();
   }
 
@@ -173,7 +203,7 @@ final class LocationCameraController {
       return;
     }
 
-    mapboxMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+    transform.moveCamera(mapboxMap, CameraUpdateFactory.newLatLng(latLng), null);
     onCameraMoveInvalidateListener.onInvalidateCameraMove();
 
     if (adjustFocalPoint) {
@@ -188,7 +218,7 @@ final class LocationCameraController {
       return;
     }
 
-    mapboxMap.moveCamera(CameraUpdateFactory.zoomTo(zoom));
+    transform.moveCamera(mapboxMap, CameraUpdateFactory.zoomTo(zoom), null);
     onCameraMoveInvalidateListener.onInvalidateCameraMove();
   }
 
@@ -197,7 +227,7 @@ final class LocationCameraController {
       return;
     }
 
-    mapboxMap.moveCamera(CameraUpdateFactory.tiltTo(tilt));
+    transform.moveCamera(mapboxMap, CameraUpdateFactory.tiltTo(tilt), null);
     onCameraMoveInvalidateListener.onInvalidateCameraMove();
   }
 

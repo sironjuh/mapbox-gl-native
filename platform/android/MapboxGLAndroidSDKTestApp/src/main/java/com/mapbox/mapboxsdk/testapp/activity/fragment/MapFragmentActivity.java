@@ -47,7 +47,7 @@ public class MapFragmentActivity extends AppCompatActivity implements MapFragmen
   }
 
   private MapboxMapOptions createFragmentOptions() {
-    MapboxMapOptions options = new MapboxMapOptions();
+    MapboxMapOptions options = MapboxMapOptions.createFromAttributes(this, null);
 
     options.scrollGesturesEnabled(false);
     options.zoomGesturesEnabled(false);
@@ -81,7 +81,9 @@ public class MapFragmentActivity extends AppCompatActivity implements MapFragmen
   @Override
   protected void onDestroy() {
     super.onDestroy();
-    mapView.removeOnDidFinishRenderingFrameListener(this);
+    if (mapView != null) {
+      mapView.removeOnDidFinishRenderingFrameListener(this);
+    }
   }
 
   @Override

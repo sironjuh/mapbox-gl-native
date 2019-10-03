@@ -51,6 +51,7 @@
     <string name="description_map_in_dialog">Display a map inside a dialog fragment</string>
     <string name="description_circle_layer">Show bus stops and route in Singapore</string>
     <string name="description_url_transform">Transform urls on the fly</string>
+    <string name="description_cache_management">Control the cache management with FileSource API</string>
     <string name="description_restricted_bounds">Limit viewport to Iceland</string>
     <string name="description_fill_extrusion_layer">Shows how to add 3D extruded shapes</string>
     <string name="description_building_fill_extrusion_layer">Shows how to show 3D extruded buildings</string>
@@ -68,6 +69,7 @@
     <string name="description_textureview_transparent">Enable a transparent surface on TextureView</string>
     <string name="description_overlay">Blend an overlay on a map</string>
     <string name="description_grid_source">Example Custom Geometry Source</string>
+    <string name="description_no_style">Load a map without providing a style URI or JSON</string>
     <string name="description_local_glyph">Suzhou using Droid Sans for Chinese glyphs</string>
     <string name="description_hillshade">Example raster-dem source and hillshade layer</string>
     <string name="description_heatmaplayer">Use HeatmapLayer to visualise earthquakes</string>
@@ -79,8 +81,8 @@
     <string name="description_location_fragment">Uses LocationComponent in a Fragment</string>
     <string name="description_location_manual">Force location updates and don\'t rely on the engine</string>
     <string name="description_location_activation_builder">Use LocationComponentActivationOptions to set options</string>
-    <string name="description_recyclerview_textureview">Show a TextureView MapView as a recyclerView item</string>
-    <string name="description_recyclerview_glsurfaceview">Show a GLSurfaceView MapView as a recyclerView item</string>
+    <string name="description_recyclerview_textureview">Show multiple TextureView MapViews as recyclerView items</string>
+    <string name="description_recyclerview_glsurfaceview">Show multiple GLSurfaceView MapViews as recyclerView items</string>
     <string name="description_nested_viewpager">Show a MapView inside a viewpager inside a recyclerView</string>
     <string name="description_performance_measurement">Show the use PerformanceEvent for performance measurements</string>
     <string name="description_physical_circle">Use TurfTransformation#circle() to show a Cirlce expressed in physical units</string>

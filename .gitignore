@@ -5,11 +5,13 @@
 *.gcda
 *~
 offline.db
+new_offline.db
 xcuserdata
 /platform/node/test/actual
 /platform/node/test/diff
 /mason_packages
 /build
+/next/build
 /lib
 /test/node_modules
 /test/fixtures/*/*_actual.*
@@ -23,6 +25,7 @@ xcuserdata
 /node_modules
 /platform/ios/benchmark/assets/glyphs/DIN*
 /platform/ios/benchmark/assets/tiles/mapbox.mapbox-terrain-v2,mapbox.mapbox-streets-v6
+/platform/darwin/developer.xcconfig
 **/token
 /platform/macos/macos.xcworkspace/xcshareddata/macos.xcscmblueprint
 /platform/ios/ios.xcworkspace/xcshareddata/ios.xcscmblueprint

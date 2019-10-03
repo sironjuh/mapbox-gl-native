@@ -1,3 +1,5 @@
+// clang-format off
+
 // This file is generated. Edit scripts/generate-style-code.js, then run `make style-code`.
 
 #pragma once
@@ -214,6 +216,11 @@ struct TextVariableAnchor : LayoutProperty<std::vector<TextVariableAnchorType>> 
     static std::vector<TextVariableAnchorType> defaultValue() { return {  }; }
 };
 
+struct TextWritingMode : LayoutProperty<std::vector<TextWritingModeType>> {
+    static constexpr const char *name() { return "text-writing-mode"; }
+    static std::vector<TextWritingModeType> defaultValue() { return {  }; }
+};
+
 struct IconColor : DataDrivenPaintProperty<Color, attributes::fill_color, uniforms::fill_color> {
     static Color defaultValue() { return Color::black(); }
 };
@@ -313,7 +320,8 @@ class SymbolLayoutProperties : public Properties<
     TextRotationAlignment,
     TextSize,
     TextTransform,
-    TextVariableAnchor
+    TextVariableAnchor,
+    TextWritingMode
 > {};
 
 class SymbolPaintProperties : public Properties<
@@ -341,6 +349,8 @@ public:
         SymbolPaintProperties::PossiblyEvaluated);
     ~SymbolLayerProperties() override;
 
+    unsigned long constantsMask() const override;
+
     const SymbolLayer::Impl& layerImpl() const;
     // Data members.
     SymbolPaintProperties::PossiblyEvaluated evaluated;
@@ -348,3 +358,5 @@ public:
 
 } // namespace style
 } // namespace mbgl
+
+// clang-format on

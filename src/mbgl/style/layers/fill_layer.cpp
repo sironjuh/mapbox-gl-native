@@ -9,6 +9,7 @@
 #include <mbgl/style/conversion/transition_options.hpp>
 #include <mbgl/style/conversion/json.hpp>
 #include <mbgl/style/conversion_impl.hpp>
+#include <mbgl/util/traits.hpp>
 
 #include <mapbox/eternal.hpp>
 
@@ -18,13 +19,13 @@ namespace style {
 
 // static
 const LayerTypeInfo* FillLayer::Impl::staticTypeInfo() noexcept {
-    const static LayerTypeInfo typeInfo
-        {"fill",
-          LayerTypeInfo::Source::Required,
-          LayerTypeInfo::Pass3D::NotRequired,
-          LayerTypeInfo::Layout::Required,
-          LayerTypeInfo::FadingTiles::NotRequired
-        };
+    const static LayerTypeInfo typeInfo{"fill",
+                                        LayerTypeInfo::Source::Required,
+                                        LayerTypeInfo::Pass3D::NotRequired,
+                                        LayerTypeInfo::Layout::Required,
+                                        LayerTypeInfo::FadingTiles::NotRequired,
+                                        LayerTypeInfo::CrossTileIndex::NotRequired,
+                                        LayerTypeInfo::TileKind::Geometry};
     return &typeInfo;
 }
 
@@ -253,44 +254,53 @@ TransitionOptions FillLayer::getFillTranslateAnchorTransition() const {
 
 using namespace conversion;
 
+namespace {
+
+enum class Property : uint8_t {
+    FillAntialias,
+    FillColor,
+    FillOpacity,
+    FillOutlineColor,
+    FillPattern,
+    FillTranslate,
+    FillTranslateAnchor,
+    FillAntialiasTransition,
+    FillColorTransition,
+    FillOpacityTransition,
+    FillOutlineColorTransition,
+    FillPatternTransition,
+    FillTranslateTransition,
+    FillTranslateAnchorTransition,
+};
+
+template <typename T>
+constexpr uint8_t toUint8(T t) noexcept {
+    return uint8_t(mbgl::underlying_type(t));
+}
+
+MAPBOX_ETERNAL_CONSTEXPR const auto layerProperties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>(
+    {{"fill-antialias", toUint8(Property::FillAntialias)},
+     {"fill-color", toUint8(Property::FillColor)},
+     {"fill-opacity", toUint8(Property::FillOpacity)},
+     {"fill-outline-color", toUint8(Property::FillOutlineColor)},
+     {"fill-pattern", toUint8(Property::FillPattern)},
+     {"fill-translate", toUint8(Property::FillTranslate)},
+     {"fill-translate-anchor", toUint8(Property::FillTranslateAnchor)},
+     {"fill-antialias-transition", toUint8(Property::FillAntialiasTransition)},
+     {"fill-color-transition", toUint8(Property::FillColorTransition)},
+     {"fill-opacity-transition", toUint8(Property::FillOpacityTransition)},
+     {"fill-outline-color-transition", toUint8(Property::FillOutlineColorTransition)},
+     {"fill-pattern-transition", toUint8(Property::FillPatternTransition)},
+     {"fill-translate-transition", toUint8(Property::FillTranslateTransition)},
+     {"fill-translate-anchor-transition", toUint8(Property::FillTranslateAnchorTransition)}});
+
+constexpr uint8_t lastPaintPropertyIndex = toUint8(Property::FillTranslateAnchorTransition);
+} // namespace
+
 optional<Error> FillLayer::setPaintProperty(const std::string& name, const Convertible& value) {
-    enum class Property : uint8_t {
-        FillAntialias,
-        FillColor,
-        FillOpacity,
-        FillOutlineColor,
-        FillPattern,
-        FillTranslate,
-        FillTranslateAnchor,
-        FillAntialiasTransition,
-        FillColorTransition,
-        FillOpacityTransition,
-        FillOutlineColorTransition,
-        FillPatternTransition,
-        FillTranslateTransition,
-        FillTranslateAnchorTransition,
-    };
-
-    MAPBOX_ETERNAL_CONSTEXPR const auto properties = mapbox::eternal::hash_map<mapbox::eternal::string, uint8_t>({
-        { "fill-antialias", static_cast<uint8_t>(Property::FillAntialias) },
-        { "fill-color", static_cast<uint8_t>(Property::FillColor) },
-        { "fill-opacity", static_cast<uint8_t>(Property::FillOpacity) },
-        { "fill-outline-color", static_cast<uint8_t>(Property::FillOutlineColor) },
-        { "fill-pattern", static_cast<uint8_t>(Property::FillPattern) },
-        { "fill-translate", static_cast<uint8_t>(Property::FillTranslate) },
-        { "fill-translate-anchor", static_cast<uint8_t>(Property::FillTranslateAnchor) },
-        { "fill-antialias-transition", static_cast<uint8_t>(Property::FillAntialiasTransition) },
-        { "fill-color-transition", static_cast<uint8_t>(Property::FillColorTransition) },
-        { "fill-opacity-transition", static_cast<uint8_t>(Property::FillOpacityTransition) },
-        { "fill-outline-color-transition", static_cast<uint8_t>(Property::FillOutlineColorTransition) },
-        { "fill-pattern-transition", static_cast<uint8_t>(Property::FillPatternTransition) },
-        { "fill-translate-transition", static_cast<uint8_t>(Property::FillTranslateTransition) },
-        { "fill-translate-anchor-transition", static_cast<uint8_t>(Property::FillTranslateAnchorTransition) }
-    });
-
-    const auto it = properties.find(name.c_str());
-    if (it == properties.end()) {
-        return Error { "layer doesn't support this property" };
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end() || it->second > lastPaintPropertyIndex) {
+        return Error{"layer doesn't support this property"};
     }
 
     auto property = static_cast<Property>(it->second);
@@ -381,44 +391,82 @@ optional<Error> FillLayer::setPaintProperty(const std::string& name, const Conve
     if (!transition) {
         return error;
     }
-    
+
     if (property == Property::FillAntialiasTransition) {
         setFillAntialiasTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillColorTransition) {
         setFillColorTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillOpacityTransition) {
         setFillOpacityTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillOutlineColorTransition) {
         setFillOutlineColorTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillPatternTransition) {
         setFillPatternTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillTranslateTransition) {
         setFillTranslateTransition(*transition);
         return nullopt;
     }
-    
+
     if (property == Property::FillTranslateAnchorTransition) {
         setFillTranslateAnchorTransition(*transition);
         return nullopt;
     }
-    
 
-    return Error { "layer doesn't support this property" };
+    return Error{"layer doesn't support this property"};
+}
+
+StyleProperty FillLayer::getProperty(const std::string& name) const {
+    const auto it = layerProperties.find(name.c_str());
+    if (it == layerProperties.end()) {
+        return {};
+    }
+
+    switch (static_cast<Property>(it->second)) {
+        case Property::FillAntialias:
+            return makeStyleProperty(getFillAntialias());
+        case Property::FillColor:
+            return makeStyleProperty(getFillColor());
+        case Property::FillOpacity:
+            return makeStyleProperty(getFillOpacity());
+        case Property::FillOutlineColor:
+            return makeStyleProperty(getFillOutlineColor());
+        case Property::FillPattern:
+            return makeStyleProperty(getFillPattern());
+        case Property::FillTranslate:
+            return makeStyleProperty(getFillTranslate());
+        case Property::FillTranslateAnchor:
+            return makeStyleProperty(getFillTranslateAnchor());
+        case Property::FillAntialiasTransition:
+            return makeStyleProperty(getFillAntialiasTransition());
+        case Property::FillColorTransition:
+            return makeStyleProperty(getFillColorTransition());
+        case Property::FillOpacityTransition:
+            return makeStyleProperty(getFillOpacityTransition());
+        case Property::FillOutlineColorTransition:
+            return makeStyleProperty(getFillOutlineColorTransition());
+        case Property::FillPatternTransition:
+            return makeStyleProperty(getFillPatternTransition());
+        case Property::FillTranslateTransition:
+            return makeStyleProperty(getFillTranslateTransition());
+        case Property::FillTranslateAnchorTransition:
+            return makeStyleProperty(getFillTranslateAnchorTransition());
+    }
+    return {};
 }
 
 optional<Error> FillLayer::setLayoutProperty(const std::string& name, const Convertible& value) {

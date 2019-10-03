@@ -4,7 +4,6 @@
 #include <mbgl/tile/vector_tile_data.hpp>
 #include <mbgl/tile/tile_loader_impl.hpp>
 
-#include <mbgl/util/default_thread_pool.hpp>
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/map/transform.hpp>
 #include <mbgl/style/style.hpp>
@@ -23,21 +22,19 @@ using namespace mbgl;
 
 class VectorTileTest {
 public:
-    FakeFileSource fileSource;
+    std::shared_ptr<FileSource> fileSource = std::make_shared<FakeFileSource>();
     TransformState transformState;
     util::RunLoop loop;
-    ThreadPool threadPool { 1 };
-    style::Style style { loop, fileSource, 1 };
+    style::Style style { *fileSource, 1 };
     AnnotationManager annotationManager { style };
     ImageManager imageManager;
-    GlyphManager glyphManager { fileSource };
+    GlyphManager glyphManager;
     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
 
     TileParameters tileParameters {
         1.0,
         MapDebugOptions(),
         transformState,
-        threadPool,
         fileSource,
         MapMode::Continuous,
         annotationManager,
@@ -101,7 +98,7 @@ TEST(VectorTileData, ParseResults) {
     ASSERT_TRUE(feature->getID().is<uint64_t>());
     ASSERT_EQ(feature->getID().get<uint64_t>(), 1u);
 
-    std::unordered_map<std::string, Value> properties = feature->getProperties();
+    const std::unordered_map<std::string, Value>& properties = feature->getProperties();
     ASSERT_EQ(properties.size(), 3u);
     ASSERT_EQ(properties.at("disputed"), *feature->getValue("disputed"));
 

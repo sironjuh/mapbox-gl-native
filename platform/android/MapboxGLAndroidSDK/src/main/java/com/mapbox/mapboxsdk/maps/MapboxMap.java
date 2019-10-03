@@ -12,6 +12,7 @@ import android.support.annotation.Size;
 import android.support.annotation.UiThread;
 import android.text.TextUtils;
 import android.view.View;
+
 import com.mapbox.android.gestures.AndroidGesturesManager;
 import com.mapbox.android.gestures.MoveGestureDetector;
 import com.mapbox.android.gestures.RotateGestureDetector;
@@ -63,6 +64,7 @@ public final class MapboxMap {
   private final CameraChangeDispatcher cameraChangeDispatcher;
   private final OnGesturesManagerInteractionListener onGesturesManagerInteractionListener;
   private final List<Style.OnStyleLoaded> awaitingStyleGetters = new ArrayList<>();
+  private final List<OnDeveloperAnimationListener> developerAnimationStartedListeners;
 
   @Nullable
   private Style.OnStyleLoaded styleLoadedCallback;
@@ -79,13 +81,15 @@ public final class MapboxMap {
   private boolean debugActive;
 
   MapboxMap(NativeMap map, Transform transform, UiSettings ui, Projection projection,
-            OnGesturesManagerInteractionListener listener, CameraChangeDispatcher cameraChangeDispatcher) {
+            OnGesturesManagerInteractionListener listener, CameraChangeDispatcher cameraChangeDispatcher,
+            List<OnDeveloperAnimationListener> developerAnimationStartedListeners) {
     this.nativeMapView = map;
     this.uiSettings = ui;
     this.projection = projection;
     this.transform = transform;
     this.onGesturesManagerInteractionListener = listener;
     this.cameraChangeDispatcher = cameraChangeDispatcher;
+    this.developerAnimationStartedListeners = developerAnimationStartedListeners;
   }
 
   void initialise(@NonNull Context context, @NonNull MapboxMapOptions options) {
@@ -414,6 +418,7 @@ public final class MapboxMap {
    */
   public final void moveCamera(@NonNull final CameraUpdate update,
                                @Nullable final MapboxMap.CancelableCallback callback) {
+    notifyDeveloperAnimationListeners();
     transform.moveCamera(MapboxMap.this, update, callback);
   }
 
@@ -522,10 +527,10 @@ public final class MapboxMap {
                                final int durationMs,
                                final boolean easingInterpolator,
                                @Nullable final MapboxMap.CancelableCallback callback) {
-
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Null duration passed into easeCamera");
     }
+    notifyDeveloperAnimationListeners();
     transform.easeCamera(MapboxMap.this, update, durationMs, easingInterpolator, callback);
   }
 
@@ -596,7 +601,7 @@ public final class MapboxMap {
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Null duration passed into animateCamera");
     }
-
+    notifyDeveloperAnimationListeners();
     transform.animateCamera(MapboxMap.this, update, durationMs, callback);
   }
 
@@ -608,7 +613,7 @@ public final class MapboxMap {
    * @param y Amount of pixels to scroll to in y direction
    */
   public void scrollBy(float x, float y) {
-    nativeMapView.moveBy(x, y, 0);
+    scrollBy(x, y, 0);
   }
 
   /**
@@ -620,6 +625,7 @@ public final class MapboxMap {
    * @param duration Amount of time the scrolling should take
    */
   public void scrollBy(float x, float y, long duration) {
+    notifyDeveloperAnimationListeners();
     nativeMapView.moveBy(x, y, duration);
   }
 
@@ -631,6 +637,7 @@ public final class MapboxMap {
    * Resets the map view to face north.
    */
   public void resetNorth() {
+    notifyDeveloperAnimationListeners();
     transform.resetNorth();
   }
 
@@ -643,6 +650,7 @@ public final class MapboxMap {
    * @param duration The duration of the transformation
    */
   public void setFocalBearing(double bearing, float focalX, float focalY, long duration) {
+    notifyDeveloperAnimationListeners();
     transform.setBearing(bearing, focalX, focalY, duration);
   }
 
@@ -696,7 +704,7 @@ public final class MapboxMap {
     moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
     setMinZoomPreference(minZoom);
     setMaxZoomPreference(maxZoom);
-    setStyle(new Style.Builder().fromUrl(definition.getStyleURL()), callback);
+    setStyle(new Style.Builder().fromUri(definition.getStyleURL()), callback);
   }
 
   //
@@ -785,7 +793,7 @@ public final class MapboxMap {
    * @see Style
    */
   public void setStyle(@Style.StyleUrl String style, final Style.OnStyleLoaded callback) {
-    this.setStyle(new Style.Builder().fromUrl(style), callback);
+    this.setStyle(new Style.Builder().fromUri(style), callback);
   }
 
   /**
@@ -823,13 +831,13 @@ public final class MapboxMap {
     }
 
     style = builder.build(nativeMapView);
-    if (!TextUtils.isEmpty(builder.getUrl())) {
-      nativeMapView.setStyleUrl(builder.getUrl());
+    if (!TextUtils.isEmpty(builder.getUri())) {
+      nativeMapView.setStyleUri(builder.getUri());
     } else if (!TextUtils.isEmpty(builder.getJson())) {
       nativeMapView.setStyleJson(builder.getJson());
     } else {
       // user didn't provide a `from` component, load a blank style instead
-      nativeMapView.setStyleJson("{}");
+      nativeMapView.setStyleJson(Style.EMPTY_JSON);
     }
   }
 
@@ -1532,24 +1540,38 @@ public final class MapboxMap {
    * frame from the viewport. For instance, if the only the top edge is inset, the
    * map center is effectively shifted downward.
    * </p>
+   * <p>
+   * This method sets the padding "lazily".
+   * This means that the <b>padding is going to be applied with the next camera transformation.</b>
+   * To apply the padding immediately use {@link CameraPosition.Builder#padding(double, double, double, double)}
+   * or {@link CameraUpdateFactory#paddingTo(double, double, double, double)}.
+   * </p>
    *
    * @param left   The left margin in pixels.
    * @param top    The top margin in pixels.
    * @param right  The right margin in pixels.
    * @param bottom The bottom margin in pixels.
+   * @deprecated Use {@link CameraPosition.Builder#padding(double, double, double, double)}
+   * or {@link CameraUpdateFactory#paddingTo(double, double, double, double)} instead.
    */
+  @Deprecated
   public void setPadding(int left, int top, int right, int bottom) {
+    // TODO padding should be passed as doubles
     projection.setContentPadding(new int[] {left, top, right, bottom});
     uiSettings.invalidate();
   }
 
   /**
-   * Returns the current configured content padding on map view.
+   * Returns the current configured content padding on map view. This might return the currently visible padding
+   * or the padding cached but not yet applied by {@link #setPadding(int, int, int, int)}.
    *
    * @return An array with length 4 in the LTRB order.
+   * @deprecated Use {@link CameraPosition#padding} instead.
    */
+  @Deprecated
   @NonNull
   public int[] getPadding() {
+    // TODO this should return double[] (semver major change)
     return projection.getContentPadding();
   }
 
@@ -2342,11 +2364,28 @@ public final class MapboxMap {
     void onSnapshotReady(@NonNull Bitmap snapshot);
   }
 
+  /**
+   * Internal use.
+   */
+  public interface OnDeveloperAnimationListener {
+
+    /**
+     * Notifies listener when a developer invoked animation is about to start.
+     */
+    void onDeveloperAnimationStarted();
+  }
+
   //
   // Used for instrumentation testing
   //
   @NonNull
   Transform getTransform() {
     return transform;
+  }
+
+  private void notifyDeveloperAnimationListeners() {
+    for (OnDeveloperAnimationListener listener : developerAnimationStartedListeners) {
+      listener.onDeveloperAnimationStarted();
+    }
   }
 }

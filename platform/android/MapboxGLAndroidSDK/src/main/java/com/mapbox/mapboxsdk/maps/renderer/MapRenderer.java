@@ -4,10 +4,10 @@ import android.content.Context;
 import android.support.annotation.CallSuper;
 import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
+
 import com.mapbox.mapboxsdk.LibraryLoader;
 import com.mapbox.mapboxsdk.log.Logger;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
-import com.mapbox.mapboxsdk.storage.FileSource;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -32,14 +32,12 @@ public abstract class MapRenderer implements MapRendererScheduler {
   private long nativePtr = 0;
   private double expectedRenderTime = 0;
   private MapboxMap.OnFpsChangedListener onFpsChangedListener;
-  protected boolean hasSurface;
 
   public MapRenderer(@NonNull Context context, String localIdeographFontFamily) {
     float pixelRatio = context.getResources().getDisplayMetrics().density;
-    String programCacheDir = FileSource.getInternalCachePath(context);
 
     // Initialise native peer
-    nativeInitialize(this, pixelRatio, programCacheDir, localIdeographFontFamily);
+    nativeInitialize(this, pixelRatio, localIdeographFontFamily);
   }
 
   public void onStart() {
@@ -119,7 +117,6 @@ public abstract class MapRenderer implements MapRendererScheduler {
 
   private native void nativeInitialize(MapRenderer self,
                                        float pixelRatio,
-                                       String programCacheDir,
                                        String localIdeographFontFamily);
 
   @CallSuper
@@ -157,14 +154,5 @@ public abstract class MapRenderer implements MapRendererScheduler {
       return;
     }
     expectedRenderTime = 1E9 / maximumFps;
-  }
-
-  /**
-   * Returns true if renderer has a surface to draw on.
-   *
-   * @return returns if renderer has a surface, false otherwise
-   */
-  public boolean hasSurface() {
-    return hasSurface;
   }
 }

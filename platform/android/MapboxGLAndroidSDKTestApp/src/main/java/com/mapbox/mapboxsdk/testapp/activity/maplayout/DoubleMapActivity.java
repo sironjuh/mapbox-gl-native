@@ -39,7 +39,7 @@ public class DoubleMapActivity extends AppCompatActivity {
     setContentView(R.layout.activity_map_fragment);
 
     if (savedInstanceState == null) {
-      MapboxMapOptions options = new MapboxMapOptions();
+      MapboxMapOptions options = MapboxMapOptions.createFromAttributes(this, null);
       options.camera(new CameraPosition.Builder()
         .target(MACHU_PICCHU)
         .zoom(ZOOM_IN)
@@ -88,7 +88,7 @@ public class DoubleMapActivity extends AppCompatActivity {
             .build()
           )
         );
-        mapboxMap.setStyle(new Style.Builder().fromUrl(Style.LIGHT));
+        mapboxMap.setStyle(new Style.Builder().fromUri(Style.LIGHT));
 
         UiSettings uiSettings = mapboxMap.getUiSettings();
         uiSettings.setAllGesturesEnabled(false);
@@ -152,7 +152,9 @@ public class DoubleMapActivity extends AppCompatActivity {
     public void onSaveInstanceState(@NonNull Bundle outState) {
       super.onSaveInstanceState(outState);
       mapView.onSaveInstanceState(outState);
-      mapViewMini.onSaveInstanceState(outState);
+      // Mini map view is not interactive in this case, so we shouldn't save the instance.
+      // If we'd like to support state saving for both maps, they'd have to be kept in separate fragments.
+      //mapViewMini.onSaveInstanceState(outState);
     }
   }
 }

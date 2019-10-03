@@ -1,7 +1,6 @@
 #include <mbgl/test/map_adapter.hpp>
 
 #include <mbgl/map/map_options.hpp>
-#include <mbgl/util/default_thread_pool.hpp>
 #include <mbgl/test/stub_file_source.hpp>
 #include <mbgl/test/util.hpp>
 #include <mbgl/util/image.hpp>
@@ -14,7 +13,7 @@
 #include <mbgl/style/sources/geojson_source.hpp>
 #include <mbgl/style/expression/dsl.hpp>
 #include <mbgl/renderer/renderer.hpp>
-#include <mbgl/gl/headless_frontend.hpp>
+#include <mbgl/gfx/headless_frontend.hpp>
 
 using namespace mbgl;
 using namespace mbgl::style;
@@ -35,9 +34,8 @@ public:
 
     util::RunLoop loop;
     std::shared_ptr<StubFileSource> fileSource = std::make_shared<StubFileSource>();
-    ThreadPool threadPool { 4 };
-    HeadlessFrontend frontend { 1, threadPool };
-    MapAdapter map { frontend, MapObserver::nullObserver(), fileSource, threadPool,
+    HeadlessFrontend frontend { 1 };
+    MapAdapter map { frontend, MapObserver::nullObserver(), fileSource,
                   MapOptions().withMapMode(MapMode::Static).withSize(frontend.getSize())};
 };
 
@@ -126,6 +124,22 @@ TEST(Query, QuerySourceFeatures) {
 
     auto features1 = test.frontend.getRenderer()->querySourceFeatures("source3");
     EXPECT_EQ(features1.size(), 1u);
+}
+
+TEST(Query, QuerySourceFeatureStates) {
+    QueryTest test;
+
+    FeatureState newState;
+    newState["hover"] = true;
+    newState["radius"].set<uint64_t>(20);
+    test.frontend.getRenderer()->setFeatureState("source1", {}, "feature1", newState);
+
+    FeatureState states;
+    test.frontend.getRenderer()->getFeatureState(states, "source1", {}, "feature1");
+    ASSERT_EQ(states.size(), 2u);
+    ASSERT_EQ(states["hover"], true);
+    ASSERT_EQ(states["radius"].get<uint64_t>(), 20u);
+    ASSERT_EQ(newState, states);
 }
 
 TEST(Query, QuerySourceFeaturesOptionValidation) {

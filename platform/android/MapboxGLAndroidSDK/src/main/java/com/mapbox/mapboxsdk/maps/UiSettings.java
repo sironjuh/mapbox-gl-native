@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.ColorInt;
+import android.support.annotation.FloatRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.Px;
@@ -66,7 +67,10 @@ public final class UiSettings {
   private boolean flingVelocityAnimationEnabled = true;
 
   private boolean increaseRotateThresholdWhenScaling = true;
+  private boolean disableRotateWhenScaling = true;
   private boolean increaseScaleThresholdWhenRotating = true;
+
+  private float zoomRate = 1.0f;
 
   private boolean deselectMarkersOnTap = true;
 
@@ -129,8 +133,10 @@ public final class UiSettings {
     outState.putBoolean(MapboxConstants.STATE_ROTATE_ANIMATION_ENABLED, isRotateVelocityAnimationEnabled());
     outState.putBoolean(MapboxConstants.STATE_FLING_ANIMATION_ENABLED, isFlingVelocityAnimationEnabled());
     outState.putBoolean(MapboxConstants.STATE_INCREASE_ROTATE_THRESHOLD, isIncreaseRotateThresholdWhenScaling());
+    outState.putBoolean(MapboxConstants.STATE_DISABLE_ROTATE_WHEN_SCALING, isDisableRotateWhenScaling());
     outState.putBoolean(MapboxConstants.STATE_INCREASE_SCALE_THRESHOLD, isIncreaseScaleThresholdWhenRotating());
     outState.putBoolean(MapboxConstants.STATE_QUICK_ZOOM_ENABLED, isQuickZoomGesturesEnabled());
+    outState.putFloat(MapboxConstants.STATE_ZOOM_RATE, getZoomRate());
   }
 
   private void restoreGestures(Bundle savedInstanceState) {
@@ -144,9 +150,11 @@ public final class UiSettings {
     setFlingVelocityAnimationEnabled(savedInstanceState.getBoolean(MapboxConstants.STATE_FLING_ANIMATION_ENABLED));
     setIncreaseRotateThresholdWhenScaling(
       savedInstanceState.getBoolean(MapboxConstants.STATE_INCREASE_ROTATE_THRESHOLD));
+    setDisableRotateWhenScaling(savedInstanceState.getBoolean(MapboxConstants.STATE_DISABLE_ROTATE_WHEN_SCALING));
     setIncreaseScaleThresholdWhenRotating(
       savedInstanceState.getBoolean(MapboxConstants.STATE_INCREASE_SCALE_THRESHOLD));
     setQuickZoomGesturesEnabled(savedInstanceState.getBoolean(MapboxConstants.STATE_QUICK_ZOOM_ENABLED));
+    setZoomRate(savedInstanceState.getFloat(MapboxConstants.STATE_ZOOM_RATE, 1.0f));
   }
 
   private void initialiseCompass(MapboxMapOptions options, @NonNull Resources resources) {
@@ -409,10 +417,6 @@ public final class UiSettings {
   }
 
   void update(@NonNull CameraPosition cameraPosition) {
-    if (!isCompassEnabled()) {
-      return;
-    }
-
     double clockwiseBearing = -cameraPosition.bearing;
     compassView.update(clockwiseBearing);
   }
@@ -771,6 +775,27 @@ public final class UiSettings {
     this.quickZoomGesturesEnabled = quickZoomGesturesEnabled;
   }
 
+  /**
+   * Returns zoom gesture rate, including pinch to zoom and quick scale.
+   *
+   * @return The zoom rate.
+   */
+  public float getZoomRate() {
+    return zoomRate;
+  }
+
+  /**
+   * Sets zoom gesture rate, including pinch to zoom and quick scale.
+   * <p>
+   * Default value is 1.0f.
+   * </p>
+   *
+   * @param zoomRate The zoom rate.
+   */
+  public void setZoomRate(@FloatRange(from = 0f) float zoomRate) {
+    this.zoomRate = zoomRate;
+  }
+
   private void restoreDeselectMarkersOnTap(Bundle savedInstanceState) {
     setDeselectMarkersOnTap(savedInstanceState.getBoolean(MapboxConstants.STATE_DESELECT_MARKER_ON_TAP));
   }
@@ -893,7 +918,9 @@ public final class UiSettings {
    * Returns whether rotation threshold should be increase whenever scale is detected.
    *
    * @return If true, rotation threshold will be increased.
+   * @deprecated unused, see {@link #isDisableRotateWhenScaling()} instead
    */
+  @Deprecated
   public boolean isIncreaseRotateThresholdWhenScaling() {
     return increaseRotateThresholdWhenScaling;
   }
@@ -902,9 +929,29 @@ public final class UiSettings {
    * Set whether rotation threshold should be increase whenever scale is detected.
    *
    * @param increaseRotateThresholdWhenScaling If true, rotation threshold will be increased.
+   * @deprecated unused, see {@link #setDisableRotateWhenScaling(boolean)} instead
    */
+  @Deprecated
   public void setIncreaseRotateThresholdWhenScaling(boolean increaseRotateThresholdWhenScaling) {
     this.increaseRotateThresholdWhenScaling = increaseRotateThresholdWhenScaling;
+  }
+
+  /**
+   * Returns whether rotation gesture detector is disabled when scale is detected first.
+   *
+   * @return If true, rotation gesture detector will be disabled when scale is detected first.
+   */
+  public boolean isDisableRotateWhenScaling() {
+    return disableRotateWhenScaling;
+  }
+
+  /**
+   * Set whether rotation gesture detector should be disabled when scale is detected first.
+   *
+   * @param disableRotateWhenScaling If true, rotation gesture detector will be disabled when scale is detected first.
+   */
+  public void setDisableRotateWhenScaling(boolean disableRotateWhenScaling) {
+    this.disableRotateWhenScaling = disableRotateWhenScaling;
   }
 
   /**
@@ -961,7 +1008,7 @@ public final class UiSettings {
    */
   public boolean areAllGesturesEnabled() {
     return rotateGesturesEnabled && tiltGesturesEnabled && zoomGesturesEnabled
-        && scrollGesturesEnabled && doubleTapGesturesEnabled && quickZoomGesturesEnabled;
+      && scrollGesturesEnabled && doubleTapGesturesEnabled && quickZoomGesturesEnabled;
   }
 
   private void saveFocalPoint(Bundle outState) {
@@ -1022,6 +1069,7 @@ public final class UiSettings {
    */
   public void invalidate() {
     setLogoMargins(getLogoMarginLeft(), getLogoMarginTop(), getLogoMarginRight(), getLogoMarginBottom());
+    setCompassEnabled(isCompassEnabled());
     setCompassMargins(getCompassMarginLeft(), getCompassMarginTop(), getCompassMarginRight(), getCompassMarginBottom());
     setAttributionMargins(getAttributionMarginLeft(), getAttributionMarginTop(), getAttributionMarginRight(),
       getAttributionMarginBottom());

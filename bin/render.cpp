@@ -4,8 +4,8 @@
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/util/default_styles.hpp>
 
-#include <mbgl/gl/headless_frontend.hpp>
-#include <mbgl/util/default_thread_pool.hpp>
+#include <mbgl/gfx/backend.hpp>
+#include <mbgl/gfx/headless_frontend.hpp>
 #include <mbgl/style/style.hpp>
 
 #include <args.hxx>
@@ -18,6 +18,7 @@ int main(int argc, char *argv[]) {
     args::ArgumentParser argumentParser("Mapbox GL render tool");
     args::HelpFlag helpFlag(argumentParser, "help", "Display this help menu", {"help"});
 
+    args::ValueFlag<std::string> backendValue(argumentParser, "Backend", "Rendering backend", {"backend"});
     args::ValueFlag<std::string> tokenValue(argumentParser, "key", "Mapbox access token", {'t', "token"});
     args::ValueFlag<std::string> styleValue(argumentParser, "URL", "Map stylesheet", {'s', "style"});
     args::ValueFlag<std::string> outputValue(argumentParser, "file", "Output file name", {'o', "output"});
@@ -76,9 +77,8 @@ int main(int argc, char *argv[]) {
 
     util::RunLoop loop;
 
-    ThreadPool threadPool(4);
-    HeadlessFrontend frontend({ width, height }, pixelRatio, threadPool);
-    Map map(frontend, MapObserver::nullObserver(), threadPool,
+    HeadlessFrontend frontend({ width, height }, pixelRatio);
+    Map map(frontend, MapObserver::nullObserver(),
             MapOptions().withMapMode(MapMode::Static).withSize(frontend.getSize()).withPixelRatio(pixelRatio),
             ResourceOptions().withCachePath(cache_file).withAssetPath(asset_root).withAccessToken(std::string(token)));
 

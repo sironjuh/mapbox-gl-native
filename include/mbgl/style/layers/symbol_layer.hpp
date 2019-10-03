@@ -1,3 +1,5 @@
+// clang-format off
+
 // This file is generated. Do not edit.
 
 #pragma once
@@ -23,6 +25,8 @@ public:
     // Dynamic properties
     optional<conversion::Error> setLayoutProperty(const std::string& name, const conversion::Convertible& value) final;
     optional<conversion::Error> setPaintProperty(const std::string& name, const conversion::Convertible& value) final;
+
+    StyleProperty getProperty(const std::string& name) const final;
 
     // Layout properties
 
@@ -186,6 +190,10 @@ public:
     const PropertyValue<std::vector<TextVariableAnchorType>>& getTextVariableAnchor() const;
     void setTextVariableAnchor(const PropertyValue<std::vector<TextVariableAnchorType>>&);
 
+    static PropertyValue<std::vector<TextWritingModeType>> getDefaultTextWritingMode();
+    const PropertyValue<std::vector<TextWritingModeType>>& getTextWritingMode() const;
+    void setTextWritingMode(const PropertyValue<std::vector<TextWritingModeType>>&);
+
     // Paint properties
 
     static PropertyValue<Color> getDefaultIconColor();
@@ -287,3 +295,5 @@ protected:
 
 } // namespace style
 } // namespace mbgl
+
+// clang-format on

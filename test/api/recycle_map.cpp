@@ -2,14 +2,13 @@
 #include <mbgl/test/stub_file_source.hpp>
 #include <mbgl/test/map_adapter.hpp>
 
-#include <mbgl/gl/headless_frontend.hpp>
+#include <mbgl/gfx/headless_frontend.hpp>
 #include <mbgl/map/map_options.hpp>
 #include <mbgl/gfx/backend_scope.hpp>
 #include <mbgl/style/layers/symbol_layer.hpp>
 #include <mbgl/style/sources/geojson_source.hpp>
 #include <mbgl/style/image.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/util/default_thread_pool.hpp>
 #include <mbgl/util/exception.hpp>
 #include <mbgl/util/geometry.hpp>
 #include <mbgl/util/geojson.hpp>
@@ -23,11 +22,9 @@ using namespace mbgl::style;
 TEST(API, RecycleMapUpdateImages) {
     util::RunLoop loop;
 
-    ThreadPool threadPool(4);
-
-    HeadlessFrontend frontend { 1, threadPool };
+    HeadlessFrontend frontend { 1 };
     auto map = std::make_unique<MapAdapter>(frontend, MapObserver::nullObserver(),
-                                         std::make_shared<StubFileSource>(), threadPool,
+                                         std::make_shared<StubFileSource>(),
                                          MapOptions().withMapMode(MapMode::Static).withSize(frontend.getSize()));
 
     EXPECT_TRUE(map);

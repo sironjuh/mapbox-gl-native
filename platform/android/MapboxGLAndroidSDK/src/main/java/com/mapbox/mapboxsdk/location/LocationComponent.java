@@ -18,6 +18,7 @@ import com.mapbox.android.core.location.LocationEngineCallback;
 import com.mapbox.android.core.location.LocationEngineProvider;
 import com.mapbox.android.core.location.LocationEngineRequest;
 import com.mapbox.android.core.location.LocationEngineResult;
+import com.mapbox.android.core.permissions.PermissionsManager;
 import com.mapbox.mapboxsdk.R;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdate;
@@ -31,9 +32,11 @@ import com.mapbox.mapboxsdk.maps.MapboxMap.OnCameraIdleListener;
 import com.mapbox.mapboxsdk.maps.MapboxMap.OnCameraMoveListener;
 import com.mapbox.mapboxsdk.maps.MapboxMap.OnMapClickListener;
 import com.mapbox.mapboxsdk.maps.Style;
+import com.mapbox.mapboxsdk.maps.Transform;
 
 import java.lang.ref.WeakReference;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -43,6 +46,7 @@ import static com.mapbox.mapboxsdk.location.LocationComponentConstants.DEFAULT_F
 import static com.mapbox.mapboxsdk.location.LocationComponentConstants.DEFAULT_INTERVAL_MILLIS;
 import static com.mapbox.mapboxsdk.location.LocationComponentConstants.DEFAULT_TRACKING_TILT_ANIM_DURATION;
 import static com.mapbox.mapboxsdk.location.LocationComponentConstants.DEFAULT_TRACKING_ZOOM_ANIM_DURATION;
+import static com.mapbox.mapboxsdk.location.LocationComponentConstants.TRANSITION_ANIMATION_DURATION_MS;
 
 /**
  * The Location Component provides location awareness to your mobile application. Enabling this
@@ -66,7 +70,7 @@ import static com.mapbox.mapboxsdk.location.LocationComponentConstants.DEFAULT_T
  * </strong>
  * <p>
  * Using this component requires you to request permission beforehand manually or using
- * {@link com.mapbox.android.core.permissions.PermissionsManager}. Either
+ * {@link PermissionsManager}. Either
  * {@code ACCESS_COARSE_LOCATION} or {@code ACCESS_FINE_LOCATION} permissions can be requested for
  * this component to work as expected.
  * <p>
@@ -95,6 +99,8 @@ public final class LocationComponent {
 
   @NonNull
   private final MapboxMap mapboxMap;
+  @NonNull
+  private final Transform transform;
   private Style style;
   private LocationComponentOptions options;
   @NonNull
@@ -178,19 +184,26 @@ public final class LocationComponent {
    * <p>
    * To get the component object use {@link MapboxMap#getLocationComponent()}.
    */
-  public LocationComponent(@NonNull MapboxMap mapboxMap) {
+  public LocationComponent(@NonNull MapboxMap mapboxMap,
+                           @NonNull Transform transform,
+                           @NonNull List<MapboxMap.OnDeveloperAnimationListener> developerAnimationListeners) {
     this.mapboxMap = mapboxMap;
+    this.transform = transform;
+    developerAnimationListeners.add(developerAnimationListener);
   }
 
   // used for creating a spy
   LocationComponent() {
     //noinspection ConstantConditions
     mapboxMap = null;
+    transform = null;
   }
 
   @VisibleForTesting
   LocationComponent(@NonNull MapboxMap mapboxMap,
-                    @NonNull LocationEngineCallback<LocationEngineResult> currentlistener,
+                    @NonNull Transform transform,
+                    @NonNull List<MapboxMap.OnDeveloperAnimationListener> developerAnimationListeners,
+                    @NonNull LocationEngineCallback<LocationEngineResult> currentListener,
                     @NonNull LocationEngineCallback<LocationEngineResult> lastListener,
                     @NonNull LocationLayerController locationLayerController,
                     @NonNull LocationCameraController locationCameraController,
@@ -199,7 +212,9 @@ public final class LocationComponent {
                     @NonNull CompassEngine compassEngine,
                     @NonNull InternalLocationEngineProvider internalLocationEngineProvider) {
     this.mapboxMap = mapboxMap;
-    this.currentLocationEngineListener = currentlistener;
+    this.transform = transform;
+    developerAnimationListeners.add(developerAnimationListener);
+    this.currentLocationEngineListener = currentListener;
     this.lastLocationEngineListener = lastListener;
     this.locationLayerController = locationLayerController;
     this.locationCameraController = locationCameraController;
@@ -524,7 +539,6 @@ public final class LocationComponent {
    * @param cameraMode one of the modes found in {@link CameraMode}
    */
   public void setCameraMode(@CameraMode.Mode int cameraMode) {
-    checkActivationState();
     setCameraMode(cameraMode, null);
   }
 
@@ -550,8 +564,45 @@ public final class LocationComponent {
    */
   public void setCameraMode(@CameraMode.Mode int cameraMode,
                             @Nullable OnLocationCameraTransitionListener transitionListener) {
+    setCameraMode(cameraMode, TRANSITION_ANIMATION_DURATION_MS, null, null, null, transitionListener);
+  }
+
+  /**
+   * Sets the camera mode, which determines how the map camera will track the rendered location.
+   * <p>
+   * When camera is transitioning to a new mode, it will reject inputs like {@link #zoomWhileTracking(double)} or
+   * {@link #tiltWhileTracking(double)}.
+   * Use {@link OnLocationCameraTransitionListener} to listen for the transition state.
+   * <p>
+   * Set values of zoom, bearing and tilt that the camera will transition to. If null is passed to any of those,
+   * current value will be used for that parameter instead.
+   * If the camera is already tracking, provided values are ignored.
+   * <p>
+   * <ul>
+   * <li>{@link CameraMode#NONE}: No camera tracking</li>
+   * <li>{@link CameraMode#NONE_COMPASS}: Camera does not track location, but does track compass bearing</li>
+   * <li>{@link CameraMode#NONE_GPS}: Camera does not track location, but does track GPS bearing</li>
+   * <li>{@link CameraMode#TRACKING}: Camera tracks the user location</li>
+   * <li>{@link CameraMode#TRACKING_COMPASS}: Camera tracks the user location, with bearing provided by a compass</li>
+   * <li>{@link CameraMode#TRACKING_GPS}: Camera tracks the user location, with normalized bearing</li>
+   * <li>{@link CameraMode#TRACKING_GPS_NORTH}: Camera tracks the user location, with bearing always set to north</li>
+   * </ul>
+   *
+   * @param cameraMode         one of the modes found in {@link CameraMode}
+   * @param transitionDuration duration of the transition in milliseconds
+   * @param zoom               target zoom, set to null to use current camera position
+   * @param bearing            target bearing, set to null to use current camera position
+   * @param tilt               target tilt, set to null to use current camera position
+   * @param transitionListener callback that's going to be invoked when the transition animation finishes
+   */
+  public void setCameraMode(@CameraMode.Mode int cameraMode,
+                            long transitionDuration,
+                            @Nullable Double zoom, @Nullable Double bearing, @Nullable Double tilt,
+                            @Nullable OnLocationCameraTransitionListener transitionListener) {
     checkActivationState();
-    locationCameraController.setCameraMode(cameraMode, lastLocation, new CameraTransitionListener(transitionListener));
+    locationCameraController.setCameraMode(
+      cameraMode, lastLocation, transitionDuration, zoom, bearing, tilt,
+      new CameraTransitionListener(transitionListener));
     updateCompassListenerState(true);
   }
 
@@ -675,6 +726,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the zoom change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the zoom as a camera change argument.
+   * </p>
    *
    * @param zoomLevel         The desired zoom level.
    * @param animationDuration The zoom animation duration.
@@ -690,6 +745,10 @@ public final class LocationComponent {
         "LocationComponent#zoomWhileTracking method can only be used",
         " when a camera mode other than CameraMode#NONE is engaged."));
       return;
+    } else if (locationCameraController.isTransitioning()) {
+      Logger.e(TAG,
+        "LocationComponent#zoomWhileTracking method call is ignored because the camera mode is transitioning");
+      return;
     }
     locationAnimatorCoordinator.feedNewZoomLevel(zoomLevel, mapboxMap.getCameraPosition(), animationDuration, callback);
   }
@@ -700,6 +759,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the zoom change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the zoom as a camera change argument.
+   * </p>
    *
    * @param zoomLevel         The desired zoom level.
    * @param animationDuration The zoom animation duration.
@@ -715,6 +778,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the zoom change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the zoom as a camera change argument.
+   * </p>
    *
    * @param zoomLevel The desired zoom level.
    */
@@ -737,6 +804,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the tilt change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the tilt as a camera change argument.
+   * </p>
    *
    * @param tilt              The desired camera tilt.
    * @param animationDuration The tilt animation duration.
@@ -752,6 +823,10 @@ public final class LocationComponent {
         "LocationComponent#tiltWhileTracking method can only be used",
         " when a camera mode other than CameraMode#NONE is engaged."));
       return;
+    } else if (locationCameraController.isTransitioning()) {
+      Logger.e(TAG,
+        "LocationComponent#tiltWhileTracking method call is ignored because the camera mode is transitioning");
+      return;
     }
     locationAnimatorCoordinator.feedNewTilt(tilt, mapboxMap.getCameraPosition(), animationDuration, callback);
   }
@@ -762,6 +837,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the tilt change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the tilt as a camera change argument.
+   * </p>
    *
    * @param tilt              The desired camera tilt.
    * @param animationDuration The tilt animation duration.
@@ -777,6 +856,10 @@ public final class LocationComponent {
    * If you are not using any of {@link CameraMode} modes,
    * use one of {@link MapboxMap#moveCamera(CameraUpdate)},
    * {@link MapboxMap#easeCamera(CameraUpdate)} or {@link MapboxMap#animateCamera(CameraUpdate)} instead.
+   * <p>
+   * If the camera is transitioning when the tilt change is requested, the call is going to be ignored.
+   * Use {@link CameraTransitionListener} to chain the animations, or provide the tilt as a camera change argument.
+   * </p>
    *
    * @param tilt The desired camera tilt.
    */
@@ -818,7 +901,7 @@ public final class LocationComponent {
    * <pre>
    * {@code
    * mapboxMap.addOnCameraIdleListener(new MapboxMap.OnCameraIdleListener() {
-   *   @Override
+   *   {@literal @}Override
    *   public void onCameraIdle() {
    *     double zoom = mapboxMap.getCameraPosition().zoom;
    *     int maxAnimationFps;
@@ -1131,7 +1214,6 @@ public final class LocationComponent {
     }
 
     isLayerReady = false;
-    locationLayerController.hide();
     staleStateManager.onStop();
     if (compassEngine != null) {
       updateCompassListenerState(false);
@@ -1167,7 +1249,7 @@ public final class LocationComponent {
     locationLayerController = new LocationLayerController(mapboxMap, style, sourceProvider, featureProvider,
       bitmapProvider, options, renderModeChangedListener);
     locationCameraController = new LocationCameraController(
-      context, mapboxMap, cameraTrackingChangedListener, options, onCameraMoveInvalidateListener);
+      context, mapboxMap, transform, cameraTrackingChangedListener, options, onCameraMoveInvalidateListener);
 
     locationAnimatorCoordinator = new LocationAnimatorCoordinator(
       mapboxMap.getProjection(),
@@ -1238,6 +1320,7 @@ public final class LocationComponent {
 
   private void disableLocationComponent() {
     isEnabled = false;
+    locationLayerController.hide();
     onLocationLayerStop();
   }
 
@@ -1342,6 +1425,9 @@ public final class LocationComponent {
     animationsValueChangeListeners.addAll(locationLayerController.getAnimationListeners());
     animationsValueChangeListeners.addAll(locationCameraController.getAnimationListeners());
     locationAnimatorCoordinator.updateAnimatorListenerHolders(animationsValueChangeListeners);
+    locationAnimatorCoordinator.resetAllCameraAnimations(mapboxMap.getCameraPosition(),
+      locationCameraController.getCameraMode() == CameraMode.TRACKING_GPS_NORTH);
+    locationAnimatorCoordinator.resetAllLayerAnimations();
   }
 
   @NonNull
@@ -1466,7 +1552,8 @@ public final class LocationComponent {
   }
 
   @NonNull
-  private OnCameraTrackingChangedListener cameraTrackingChangedListener = new OnCameraTrackingChangedListener() {
+  @VisibleForTesting
+  OnCameraTrackingChangedListener cameraTrackingChangedListener = new OnCameraTrackingChangedListener() {
     @Override
     public void onCameraTrackingDismissed() {
       for (OnCameraTrackingChangedListener listener : onCameraTrackingChangedListeners) {
@@ -1479,8 +1566,6 @@ public final class LocationComponent {
       locationAnimatorCoordinator.cancelZoomAnimation();
       locationAnimatorCoordinator.cancelTiltAnimation();
       updateAnimatorListenerHolders();
-      locationAnimatorCoordinator.resetAllCameraAnimations(mapboxMap.getCameraPosition(),
-        locationCameraController.getCameraMode() == CameraMode.TRACKING_GPS_NORTH);
       for (OnCameraTrackingChangedListener listener : onCameraTrackingChangedListeners) {
         listener.onCameraTrackingChanged(currentMode);
       }
@@ -1488,7 +1573,8 @@ public final class LocationComponent {
   };
 
   @NonNull
-  private OnRenderModeChangedListener renderModeChangedListener = new OnRenderModeChangedListener() {
+  @VisibleForTesting
+  OnRenderModeChangedListener renderModeChangedListener = new OnRenderModeChangedListener() {
     @Override
     public void onRenderModeChanged(int currentMode) {
       updateAnimatorListenerHolders();
@@ -1497,6 +1583,17 @@ public final class LocationComponent {
       }
     }
   };
+
+  @NonNull
+  private final MapboxMap.OnDeveloperAnimationListener developerAnimationListener =
+    new MapboxMap.OnDeveloperAnimationListener() {
+      @Override
+      public void onDeveloperAnimationStarted() {
+        if (isComponentInitialized && isEnabled) {
+          setCameraMode(CameraMode.NONE);
+        }
+      }
+    };
 
   static class InternalLocationEngineProvider {
     LocationEngine getBestLocationEngine(@NonNull Context context, boolean background) {

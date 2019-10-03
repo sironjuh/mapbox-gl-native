@@ -13,6 +13,7 @@
 #include <mbgl/style/expression/coercion.hpp>
 #include <mbgl/style/expression/compound_expression.hpp>
 #include <mbgl/style/expression/comparison.hpp>
+#include <mbgl/style/expression/number_format.hpp>
 #include <mbgl/style/expression/format_expression.hpp>
 #include <mbgl/style/expression/interpolate.hpp>
 #include <mbgl/style/expression/length.hpp>
@@ -72,7 +73,8 @@ bool isConstant(const Expression& expression) {
     
     return isFeatureConstant(expression) &&
         isGlobalPropertyConstant(expression, std::array<std::string, 2>{{"zoom", "heatmap-density"}}) &&
-        isGlobalPropertyConstant(expression, std::array<std::string, 2>{{"zoom", "line-progress"}});
+        isGlobalPropertyConstant(expression, std::array<std::string, 2>{{"zoom", "line-progress"}}) &&
+        isGlobalPropertyConstant(expression, std::array<std::string, 2>{{"zoom", "accumulated"}});
 }
 
 using namespace mbgl::style::conversion;
@@ -120,6 +122,7 @@ MAPBOX_ETERNAL_CONSTEXPR const auto expressionRegistry = mapbox::eternal::hash_m
     {"literal", Literal::parse},
     {"match", parseMatch},
     {"number", Assertion::parse},
+    {"number-format", NumberFormat::parse},
     {"object", Assertion::parse},
     {"step", Step::parse},
     {"string", Assertion::parse},

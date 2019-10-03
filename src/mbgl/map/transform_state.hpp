@@ -17,6 +17,7 @@
 namespace mbgl {
 
 class UnwrappedTileID;
+class TileCoordinate;
 
 class TransformState {
     friend class Transform;
@@ -42,7 +43,7 @@ public:
     // Viewport mode
     ViewportMode getViewportMode() const;
 
-    CameraOptions getCameraOptions(const EdgeInsets&) const;
+    CameraOptions getCameraOptions(optional<EdgeInsets>) const;
 
     // Position
     LatLng getLatLng(LatLng::WrapMode = LatLng::Unwrapped) const;
@@ -53,6 +54,9 @@ public:
     double getZoom() const;
     uint8_t getIntegerZoom() const;
     double getZoomFraction() const;
+
+    // Scale
+    double getScale() const { return scale; }
 
     // Bounds
     void setLatLngBounds(LatLngBounds);
@@ -78,6 +82,8 @@ public:
     // Conversion
     ScreenCoordinate latLngToScreenCoordinate(const LatLng&) const;
     LatLng screenCoordinateToLatLng(const ScreenCoordinate&, LatLng::WrapMode = LatLng::Unwrapped) const;
+    // Implements mapbox-gl-js pointCoordinate() : MercatorCoordinate.
+    TileCoordinate screenCoordinateToTileCoordinate(const ScreenCoordinate&, uint8_t atZoom) const;
 
     double zoomScale(double zoom) const;
     double scaleZoom(double scale) const;
@@ -93,6 +99,10 @@ private:
     bool rotatedNorth() const;
     void constrain(double& scale, double& x, double& y) const;
 
+    // Viewport center offset, from [size.width / 2, size.height / 2], defined
+    // by |edgeInsets| in screen coordinates, with top left origin.
+    ScreenCoordinate getCenterOffset() const;
+
     LatLngBounds bounds;
 
     // Limit the amount of zooming possible on the map.
@@ -104,7 +114,7 @@ private:
     // logical dimensions
     Size size;
 
-    mat4 coordinatePointMatrix(double z) const;
+    mat4 coordinatePointMatrix() const;
     mat4 getPixelMatrix() const;
 
     /** Recenter the map so that the given coordinate is located at the given
@@ -136,6 +146,8 @@ private:
     double xSkew = 0.0;
     double ySkew = 1.0;
     bool axonometric = false;
+
+    EdgeInsets edgeInsets;
 
     // cache values for spherical mercator math
     double Bc = Projection::worldSize(scale) / util::DEGREES_MAX;

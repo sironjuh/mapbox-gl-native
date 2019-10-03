@@ -22,7 +22,6 @@
 
 namespace mbgl {
 
-class Scheduler;
 class RendererFrontend;
 
 namespace style {
@@ -34,7 +33,6 @@ class Map : private util::noncopyable {
 public:
     explicit Map(RendererFrontend&,
                  MapObserver&,
-                 Scheduler&,
                  const MapOptions&,
                  const ResourceOptions&);
     ~Map();
@@ -62,7 +60,7 @@ public:
     bool isPanning() const;
 
     // Camera
-    CameraOptions getCameraOptions(const EdgeInsets& = {}) const;
+    CameraOptions getCameraOptions(optional<EdgeInsets> = {}) const;
     void jumpTo(const CameraOptions&);
     void easeTo(const CameraOptions&, const AnimationOptions&);
     void flyTo(const CameraOptions&, const AnimationOptions&);

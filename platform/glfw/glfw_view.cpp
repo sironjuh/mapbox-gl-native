@@ -1,24 +1,27 @@
 #include "glfw_view.hpp"
-#include "glfw_gl_backend.hpp"
+#include "glfw_backend.hpp"
 #include "glfw_renderer_frontend.hpp"
 #include "ny_route.hpp"
 
 #include <mbgl/annotation/annotation.hpp>
-#include <mbgl/style/style.hpp>
-#include <mbgl/style/sources/custom_geometry_source.hpp>
-#include <mbgl/style/image.hpp>
-#include <mbgl/style/transition_options.hpp>
-#include <mbgl/style/layers/fill_extrusion_layer.hpp>
-#include <mbgl/style/layers/line_layer.hpp>
+#include <mbgl/gfx/backend.hpp>
+#include <mbgl/gfx/backend_scope.hpp>
+#include <mbgl/map/camera.hpp>
+#include <mbgl/renderer/renderer.hpp>
 #include <mbgl/style/expression/dsl.hpp>
+#include <mbgl/style/image.hpp>
+#include <mbgl/style/layers/fill_extrusion_layer.hpp>
+#include <mbgl/style/layers/fill_layer.hpp>
+#include <mbgl/style/layers/line_layer.hpp>
+#include <mbgl/style/sources/custom_geometry_source.hpp>
+#include <mbgl/style/sources/geojson_source.hpp>
+#include <mbgl/style/style.hpp>
+#include <mbgl/style/transition_options.hpp>
+#include <mbgl/util/chrono.hpp>
+#include <mbgl/util/geo.hpp>
 #include <mbgl/util/logging.hpp>
 #include <mbgl/util/platform.hpp>
 #include <mbgl/util/string.hpp>
-#include <mbgl/util/chrono.hpp>
-#include <mbgl/util/geo.hpp>
-#include <mbgl/renderer/renderer.hpp>
-#include <mbgl/gfx/backend_scope.hpp>
-#include <mbgl/map/camera.hpp>
 
 #include <mapbox/cheap_ruler.hpp>
 #include <mapbox/geometry.hpp>
@@ -76,6 +79,10 @@ GLFWView::GLFWView(bool fullscreen_, bool benchmark_)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 #endif
 
+    if (mbgl::gfx::Backend::GetType() != mbgl::gfx::Backend::Type::OpenGL) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    }
+
     glfwWindowHint(GLFW_RED_BITS, 8);
     glfwWindowHint(GLFW_GREEN_BITS, 8);
     glfwWindowHint(GLFW_BLUE_BITS, 8);
@@ -91,25 +98,17 @@ GLFWView::GLFWView(bool fullscreen_, bool benchmark_)
     }
 
     glfwSetWindowUserPointer(window, this);
-    glfwMakeContextCurrent(window);
-    if (benchmark) {
-        // Disables vsync on platforms that support it.
-        glfwSwapInterval(0);
-    } else {
-        glfwSwapInterval(1);
-    }
-
-
     glfwSetCursorPosCallback(window, onMouseMove);
     glfwSetMouseButtonCallback(window, onMouseClick);
     glfwSetWindowSizeCallback(window, onWindowResize);
     glfwSetFramebufferSizeCallback(window, onFramebufferResize);
     glfwSetScrollCallback(window, onScroll);
     glfwSetKeyCallback(window, onKey);
+    glfwSetWindowFocusCallback(window, onWindowFocus);
 
     glfwGetWindowSize(window, &width, &height);
 
-    backend = std::make_unique<GLFWGLBackend>(window);
+    backend = GLFWBackend::Create(window, benchmark);
 
     pixelRatio = static_cast<float>(backend->getSize().width) / width;
 
@@ -226,7 +225,7 @@ void GLFWView::onKey(GLFWwindow *window, int key, int /*scancode*/, int action, 
             view->clearAnnotations();
             break;
         case GLFW_KEY_I:
-            view->resetCacheCallback();
+            view->resetDatabaseCallback();
             break;
         case GLFW_KEY_K:
             view->addRandomCustomPointAnnotations(1);
@@ -326,6 +325,52 @@ void GLFWView::onKey(GLFWwindow *window, int key, int /*scancode*/, int action, 
         case GLFW_KEY_T:
             view->toggleCustomSource();
             break;
+        case GLFW_KEY_F: {
+            using namespace mbgl;
+            using namespace mbgl::style;
+            using namespace mbgl::style::expression::dsl;
+
+            auto &style = view->map->getStyle();
+            if (!style.getSource("states")) {
+                std::string url = "https://docs.mapbox.com/mapbox-gl-js/assets/us_states.geojson";
+                auto source = std::make_unique<GeoJSONSource>("states");
+                source->setURL(url);
+                style.addSource(std::move(source));
+
+                mbgl::CameraOptions cameraOptions;
+                cameraOptions.center = mbgl::LatLng{42.619626, -103.523181};
+                cameraOptions.zoom = 3;
+                cameraOptions.pitch = 0;
+                cameraOptions.bearing = 0;
+                view->map->jumpTo(cameraOptions);
+            }
+
+            auto layer = style.getLayer("state-fills");
+            if (!layer) {
+                auto fillLayer = std::make_unique<FillLayer>("state-fills", "states");
+                fillLayer->setFillColor(mbgl::Color{0.0, 0.0, 1.0, 0.5});
+                fillLayer->setFillOpacity(PropertyExpression<float>(
+                    createExpression(R"(["case", ["boolean", ["feature-state", "hover"], false], 1, 0.5])")));
+                style.addLayer(std::move(fillLayer));
+            } else {
+                layer->setVisibility(layer->getVisibility() == mbgl::style::VisibilityType::Visible
+                                         ? mbgl::style::VisibilityType::None
+                                         : mbgl::style::VisibilityType::Visible);
+            }
+
+            layer = style.getLayer("state-borders");
+            if (!layer) {
+                auto borderLayer = std::make_unique<LineLayer>("state-borders", "states");
+                borderLayer->setLineColor(mbgl::Color{0.0, 0.0, 1.0, 1.0});
+                borderLayer->setLineWidth(PropertyExpression<float>(
+                    createExpression(R"(["case", ["boolean", ["feature-state", "hover"], false], 2, 1])")));
+                style.addLayer(std::move(borderLayer));
+            } else {
+                layer->setVisibility(layer->getVisibility() == mbgl::style::VisibilityType::Visible
+                                         ? mbgl::style::VisibilityType::None
+                                         : mbgl::style::VisibilityType::Visible);
+            }
+        } break;
         }
     }
 
@@ -561,6 +606,48 @@ void GLFWView::onMouseMove(GLFWwindow *window, double x, double y) {
     }
     view->lastX = x;
     view->lastY = y;
+
+    auto &style = view->map->getStyle();
+    if (style.getLayer("state-fills")) {
+        auto screenCoordinate = mbgl::ScreenCoordinate{view->lastX, view->lastY};
+        const mbgl::RenderedQueryOptions queryOptions({{{"state-fills"}}, {}});
+        auto result = view->rendererFrontend->getRenderer()->queryRenderedFeatures(screenCoordinate, queryOptions);
+        using namespace mbgl;
+        FeatureState newState;
+
+        if (result.size() > 0) {
+            FeatureIdentifier id = result[0].id;
+            optional<std::string> idStr = featureIDtoString(id);
+
+            if (idStr) {
+                if (view->featureID && (*view->featureID != *idStr)) {
+                    newState["hover"] = false;
+                    view->rendererFrontend->getRenderer()->setFeatureState("states", {}, *view->featureID, newState);
+                    view->featureID = nullopt;
+                }
+
+                if (!view->featureID) {
+                    newState["hover"] = true;
+                    view->featureID = featureIDtoString(id);
+                    view->rendererFrontend->getRenderer()->setFeatureState("states", {}, *view->featureID, newState);
+                }
+            }
+        } else {
+            if (view->featureID) {
+                newState["hover"] = false;
+                view->rendererFrontend->getRenderer()->setFeatureState("states", {}, *view->featureID, newState);
+                view->featureID = nullopt;
+            }
+        }
+        view->invalidate();
+    }
+}
+
+void GLFWView::onWindowFocus(GLFWwindow *window, int focused) {
+    if (focused == GLFW_FALSE) { // Focus lost.
+        auto *view = reinterpret_cast<GLFWView *>(glfwGetWindowUserPointer(window));
+        view->rendererFrontend->getRenderer()->reduceMemoryUse();
+    }
 }
 
 void GLFWView::run() {
@@ -584,8 +671,6 @@ void GLFWView::run() {
             mbgl::gfx::BackendScope scope { backend->getRendererBackend() };
 
             rendererFrontend->render();
-
-            glfwSwapBuffers(window);
 
             report(1000 * (glfwGetTime() - started));
             if (benchmark) {
@@ -726,78 +811,3 @@ void GLFWView::toggleCustomSource() {
                              mbgl::style::VisibilityType::None : mbgl::style::VisibilityType::Visible);
     }
 }
-
-namespace mbgl {
-namespace platform {
-
-#ifndef MBGL_USE_GLES2
-void showDebugImage(std::string name, const char *data, size_t width, size_t height) {
-    glfwInit();
-
-    static GLFWwindow *debugWindow = nullptr;
-    if (!debugWindow) {
-        debugWindow = glfwCreateWindow(static_cast<int>(width), static_cast<int>(height), name.c_str(), nullptr, nullptr);
-        if (!debugWindow) {
-            glfwTerminate();
-            fprintf(stderr, "Failed to initialize window\n");
-            exit(1);
-        }
-    }
-
-    GLFWwindow *currentWindow = glfwGetCurrentContext();
-
-    glfwSetWindowSize(debugWindow, static_cast<int>(width), static_cast<int>(height));
-    glfwMakeContextCurrent(debugWindow);
-
-    int fbWidth, fbHeight;
-    glfwGetFramebufferSize(debugWindow, &fbWidth, &fbHeight);
-    float scale = static_cast<float>(fbWidth) / static_cast<float>(width);
-
-    glPixelZoom(scale, -scale);
-    glRasterPos2f(-1.0f, 1.0f);
-    glDrawPixels(width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
-
-    glfwSwapBuffers(debugWindow);
-
-    glfwMakeContextCurrent(currentWindow);
-}
-
-void showColorDebugImage(std::string name, const char *data, size_t logicalWidth, size_t logicalHeight, size_t width, size_t height) {
-    glfwInit();
-
-    static GLFWwindow *debugWindow = nullptr;
-    if (!debugWindow) {
-        debugWindow = glfwCreateWindow(static_cast<int>(logicalWidth), static_cast<int>(logicalHeight), name.c_str(), nullptr, nullptr);
-        if (!debugWindow) {
-            glfwTerminate();
-            fprintf(stderr, "Failed to initialize window\n");
-            exit(1);
-        }
-    }
-
-    GLFWwindow *currentWindow = glfwGetCurrentContext();
-
-    glfwSetWindowSize(debugWindow, static_cast<int>(logicalWidth), static_cast<int>(logicalHeight));
-    glfwMakeContextCurrent(debugWindow);
-
-    int fbWidth, fbHeight;
-    glfwGetFramebufferSize(debugWindow, &fbWidth, &fbHeight);
-    float xScale = static_cast<float>(fbWidth) / static_cast<float>(width);
-    float yScale = static_cast<float>(fbHeight) / static_cast<float>(height);
-
-    glClearColor(0.8, 0.8, 0.8, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glPixelZoom(xScale, -yScale);
-    glRasterPos2f(-1.0f, 1.0f);
-    glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
-
-    glfwSwapBuffers(debugWindow);
-
-    glfwMakeContextCurrent(currentWindow);
-}
-#endif
-
-} // namespace platform
-} // namespace mbgl

@@ -18,16 +18,13 @@ public:
     HeatmapBucket(const BucketParameters&, const std::vector<Immutable<style::LayerProperties>>&);
     ~HeatmapBucket() override;
 
-    void addFeature(const GeometryTileFeature&,
-                            const GeometryCollection&,
-                            const ImagePositions&,
-                            const PatternLayerMap&) override;
+    void addFeature(const GeometryTileFeature&, const GeometryCollection&, const ImagePositions&,
+                    const PatternLayerMap&, std::size_t) override;
     bool hasData() const override;
 
-    void upload(gfx::Context&) override;
+    void upload(gfx::UploadPass&) override;
 
     float getQueryRadius(const RenderLayer&) const override;
-    bool supportsLayer(const style::Layer::Impl&) const override;
 
     gfx::VertexVector<HeatmapLayoutVertex> vertices;
     gfx::IndexVector<gfx::Triangles> triangles;

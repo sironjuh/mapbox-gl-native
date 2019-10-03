@@ -5,7 +5,6 @@ import android.support.test.espresso.UiController
 import com.mapbox.mapboxsdk.camera.CameraUpdateFactory
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.testapp.action.MapboxMapAction.invoke
-
 import com.mapbox.mapboxsdk.testapp.activity.BaseTest
 import com.mapbox.mapboxsdk.testapp.activity.espresso.PixelTestActivity
 import org.junit.Assert.assertFalse
@@ -355,7 +354,7 @@ class VisibleRegionTest : BaseTest() {
     validateTestSetup()
     invoke(mapboxMap) { _: UiController, mapboxMap: MapboxMap ->
       mapboxMap.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 0.0), 8.0))
-      val d = Math.min(mapboxMap.width, mapboxMap.height) / 4;
+      val d = Math.min(mapboxMap.width, mapboxMap.height) / 4
       val latLngs = listOf(
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f, mapView.height / 2f),
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f - d / 2f, mapView.height / 2f),
@@ -364,9 +363,8 @@ class VisibleRegionTest : BaseTest() {
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f, mapView.height / 2f + d / 2f)
       )
 
-
       for (bearing in 45 until 360 step 45) {
-        mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(bearing.toDouble()));
+        mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(bearing.toDouble()))
         val visibleRegion = mapboxMap.projection.visibleRegion
         assertTrue(latLngs.all { visibleRegion.latLngBounds.contains(it) })
       }
@@ -378,7 +376,7 @@ class VisibleRegionTest : BaseTest() {
     validateTestSetup()
     invoke(mapboxMap) { _: UiController, mapboxMap: MapboxMap ->
       mapboxMap.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(0.0, 180.0), 8.0))
-      val d = Math.min(mapboxMap.width, mapboxMap.height) / 4;
+      val d = Math.min(mapboxMap.width, mapboxMap.height) / 4
       val latLngs = listOf(
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f, mapView.height / 2f),
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f - d / 2f, mapView.height / 2f),
@@ -388,9 +386,8 @@ class VisibleRegionTest : BaseTest() {
         mapboxMap.getLatLngFromScreenCoords(mapView.width / 2f, mapView.height / 2f + d / 2f)
       )
 
-
       for (bearing in 45 until 360 step 45) {
-        mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(bearing.toDouble()));
+        mapboxMap.moveCamera(CameraUpdateFactory.bearingTo(bearing.toDouble()))
         val visibleRegion = mapboxMap.projection.visibleRegion
         assertTrue(latLngs.all { visibleRegion.latLngBounds.contains(it) })
       }

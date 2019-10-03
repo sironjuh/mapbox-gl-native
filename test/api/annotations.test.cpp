@@ -2,7 +2,6 @@
 #include <mbgl/test/stub_file_source.hpp>
 #include <mbgl/test/map_adapter.hpp>
 
-#include <mbgl/util/default_thread_pool.hpp>
 #include <mbgl/annotation/annotation.hpp>
 #include <mbgl/style/style.hpp>
 #include <mbgl/style/image.hpp>
@@ -11,7 +10,7 @@
 #include <mbgl/util/run_loop.hpp>
 #include <mbgl/util/color.hpp>
 #include <mbgl/renderer/renderer.hpp>
-#include <mbgl/gl/headless_frontend.hpp>
+#include <mbgl/gfx/headless_frontend.hpp>
 
 using namespace mbgl;
 
@@ -28,10 +27,9 @@ std::unique_ptr<style::Image> namedMarker(const std::string& name) {
 class AnnotationTest {
 public:
     util::RunLoop loop;
-    ThreadPool threadPool { 4 };
-    HeadlessFrontend frontend { 1, threadPool };
+    HeadlessFrontend frontend { 1 };
 
-    MapAdapter map { frontend, MapObserver::nullObserver(), std::make_shared<StubFileSource>(), threadPool,
+    MapAdapter map { frontend, MapObserver::nullObserver(), std::make_shared<StubFileSource>(),
                   MapOptions().withMapMode(MapMode::Static).withSize(frontend.getSize())};
 
     void checkRendering(const char * name) {
@@ -434,6 +432,73 @@ TEST(Annotations, VisibleFeatures) {
     std::sort(features.begin(), features.end(), sortID);
     features.erase(std::unique(features.begin(), features.end(), sameID), features.end());
     EXPECT_EQ(features.size(), ids.size());
+}
+
+TEST(Annotations, ViewFrustumCulling) {
+    // The purpose of the test is to control that annotations outside screen
+    // rectangle are not rendered for different camera setup, especially when
+    // using edge insets - viewport center is then offsetted.
+
+    // Important premise of this test is "static const float viewportPadding = 100;"
+    // as defined in collision_index.cpp: tests using edge insets are writen so that
+    // padding is 128 (half of viewSize width). If increasing viewportPadding,
+    // increase the padding in test cases below.
+    AnnotationTest test;
+
+    auto viewSize = test.frontend.getSize();
+    auto box = ScreenBox { {}, { double(viewSize.width), double(viewSize.height) } };
+
+    test.map.getStyle().loadJSON(util::read_file("test/fixtures/api/empty.json"));
+    test.map.addAnnotationImage(namedMarker("default_marker"));
+    const LatLng center = { 5.0, 5.0 };
+    test.map.jumpTo(CameraOptions().withCenter(center).withZoom(3.0));
+
+    LatLng tl = test.map.latLngForPixel(ScreenCoordinate(0, 0));
+    LatLng br = test.map.latLngForPixel(ScreenCoordinate(viewSize.width, viewSize.height));
+
+    std::vector<LatLng> latLngs = {
+        tl,
+        test.map.latLngForPixel(ScreenCoordinate(viewSize.width, 0)),
+        test.map.latLngForPixel(ScreenCoordinate(0, viewSize.height)),
+        br,
+        center};
+
+    std::vector<mbgl::AnnotationID> ids;
+    for (auto latLng : latLngs) {
+        ids.push_back(test.map.addAnnotation(SymbolAnnotation { { latLng.longitude(), latLng.latitude() }, "default_marker" }));
+    }
+
+    std::vector<std::pair<CameraOptions, std::vector<uint64_t>>> expectedVisibleForCamera = {
+        // Start with all markers visible.
+        { CameraOptions(), { 0, 1, 2, 3, 4 } },
+        // Move center to topLeft: only former center and top left (now center) are visible.
+        { CameraOptions().withCenter(tl), { 0, 4 } },
+        // Reset center. With pitch: only top row markers and center are visible.
+        { CameraOptions().withCenter(center).withPitch(45), { 0, 1, 4 } },
+        // Reset pitch, and use padding to move viewport center: only topleft and center are visible.
+        { CameraOptions().withPitch(0).withPadding(EdgeInsets { viewSize.height * 0.5, viewSize.width * 0.5, 0, 0 }), { 0, 4 } },
+        // Use opposite padding to move viewport center: only bottom right and center are visible.
+        { CameraOptions().withPitch(0).withPadding(EdgeInsets { 0, 0, viewSize.height * 0.5, viewSize.width * 0.5 }), { 3, 4 } },
+        // Use top padding to move viewport center: top row and center are visible.
+        { CameraOptions().withPitch(0).withPadding(EdgeInsets { viewSize.height * 0.5, 0, 0, 0 }), { 0, 1, 4 } },
+        // Use bottom padding: only bottom right and center are visible.
+        { CameraOptions().withPitch(0).withPadding(EdgeInsets { 0, 0, viewSize.height * 0.5, 0 }), { 2, 3, 4 } },
+        // Left padding and pitch: top left, bottom left and center are visible.
+        { CameraOptions().withPitch(45).withPadding(EdgeInsets { 0, viewSize.width * 0.5, 0, 0 }), { 0, 2, 4 } }
+    };
+
+    for (unsigned i = 0; i < expectedVisibleForCamera.size(); i++) {
+        auto testCase = expectedVisibleForCamera[i];
+        test.map.jumpTo(testCase.first);
+        test.frontend.render(test.map);
+        auto features = test.frontend.getRenderer()->queryRenderedFeatures(box, {});
+        for (uint64_t id : testCase.second) { // testCase.second is vector of ids expected.
+            EXPECT_NE(std::find_if(features.begin(), features.end(), [&id](auto feature) {
+                return id == feature.id.template get<uint64_t>();
+            }), features.end()) << "Point with id "  << id << " is missing in test case " << i;
+            EXPECT_EQ(features.size(), testCase.second.size()) << " in test case " << i;
+        }
+    }
 }
 
 TEST(Annotations, TopOffsetPixels) {
